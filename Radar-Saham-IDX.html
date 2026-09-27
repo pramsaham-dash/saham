@@ -194,7 +194,7 @@ section{scroll-margin-top:110px}
 .nav a{color:var(--ink2);text-decoration:none}
 .nav a:hover{color:var(--accent)}
 .nav .ext-l{margin-left:auto;color:var(--accent);font-weight:600}
-.pf-form{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) auto;gap:10px 12px;align-items:end}
+.pf-form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 12px;align-items:end}
 .pf-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink2)}
 .pf-form select{padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel)}
 .pf-form input{padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel);font-family:var(--mono)}
@@ -281,6 +281,17 @@ body.locked header,body.locked main{visibility:hidden}
 .xrows li{grid-template-columns:auto 1fr;gap:10px}
 @media (max-width:860px){.xgrid{grid-template-columns:1fr 1fr}}
 @media (max-width:520px){.xgrid{grid-template-columns:1fr}}
+.cd{font-family:var(--mono);font-size:11px;color:var(--ink3);min-width:92px}
+#auto{padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:12px}
+.toast{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:60;width:min(440px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:10px;padding:10px 14px;box-shadow:0 10px 30px rgba(0,0,0,.15);display:grid;gap:5px;font-size:13px;color:var(--ink2)}
+.toast.urgent{border-left-color:var(--down)}
+.toast-h{display:flex;justify-content:space-between;gap:8px;color:var(--ink)}
+.toast-h button{border:0;background:none;font-size:18px;line-height:1;cursor:pointer;color:var(--ink3)}
+td.lim{min-width:190px}
+td.lim div{white-space:nowrap}
+.man{font-size:10px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:4px;padding:1px 4px}
+.limedit{display:flex;gap:4px;margin-top:4px}
+.limedit input{width:88px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel);font-family:var(--mono);font-size:11.5px}
 .banner{margin-top:14px;padding:10px 14px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-size:13px}
 @media (max-width:1150px){.picks{grid-template-columns:repeat(3,minmax(0,1fr))}.dt-grid{grid-template-columns:1fr 1fr}}
 @media (max-width:860px){.mkt{grid-template-columns:repeat(2,minmax(0,1fr))}.mkt2,.rec-top,.method,.dt-grid2{grid-template-columns:1fr}.picks{grid-template-columns:repeat(2,minmax(0,1fr))}.dt-grid{grid-template-columns:1fr}}
@@ -313,7 +324,7 @@ body.locked header,body.locked main{visibility:hidden}
     </form>
     <div class="ctrl">
       <button class="btn ghost" type="button" id="refreshBtn">Refresh data</button>
-      <label><input type="checkbox" id="auto" checked> Auto 5 menit</label>
+      <label>Auto refresh <select id="auto" aria-label="Interval auto refresh"><option value="0">Mati</option><option value="5" selected>5 menit</option><option value="15">15 menit</option><option value="30">30 menit</option></select></label><span class="cd" id="cd"></span>
       <button class="btn ghost" type="button" id="logoutBtn" title="Keluar">Keluar</button>
     </div>
   </div>
@@ -326,6 +337,7 @@ body.locked header,body.locked main{visibility:hidden}
 <main class="wrap">
   <div class="banner" id="banner" hidden></div>
   <a class="alert-top" id="alertTop" href="#portofolio" hidden></a>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <section id="market" aria-labelledby="mkt-h">
     <div class="sec-h"><h2 id="mkt-h">Pergerakan pasar</h2><p id="mktSub"></p></div>
@@ -376,6 +388,8 @@ body.locked header,body.locked main{visibility:hidden}
       <label>Jumlah lot<input id="pfL" type="number" min="1" step="1" placeholder="1 lot = 100 lembar" required></label>
       <label>Harga per lembar (Rp)<input id="pfP" type="number" min="1" step="1" placeholder="harga transaksi" required></label>
       <label>Tanggal<input id="pfD" type="date"></label>
+      <label>Batas cut loss<input id="pfSL" type="text" placeholder="otomatis · mis. 7% atau 2900" autocomplete="off"></label>
+      <label>Batas ambil profit<input id="pfTP" type="text" placeholder="otomatis · mis. 15% atau 3500" autocomplete="off"></label>
       <label>Rencana simpan<select id="pfH"><option value="d3">3 hari</option><option value="w1">1 minggu</option><option value="w2">2 minggu</option><option value="m3" selected>3 bulan</option><option value="long">&gt; 1 tahun</option></select></label>
       <div class="pf-btns"><button class="btn" type="submit" data-act="buy" id="pfBuy">+ Beli / tambah</button><button class="btn sell" type="submit" data-act="sell" id="pfSell">− Jual / kurangi</button></div>
       <details class="pf-fee"><summary>Biaya broker</summary><label>Fee beli %<input id="pfFb" type="number" step="0.01" min="0" value="0.15"></label><label>Fee jual % (termasuk pajak 0,1%)<input id="pfFs" type="number" step="0.01" min="0" value="0.25"></label></details>
@@ -387,7 +401,7 @@ body.locked header,body.locked main{visibility:hidden}
     <div class="pf-bottom">
       <div class="panel box"><h3>Untung/rugi per saham (Rp)</h3><div class="chartbox" style="height:240px"><canvas id="pfChart"></canvas></div></div>
       <div class="panel box"><h3>Riwayat transaksi</h3><div id="pfHist" class="pf-hist"></div>
-        <div class="pf-io"><button class="btn ghost" type="button" id="pfNotif">Aktifkan notifikasi desktop</button><button class="btn ghost" type="button" id="pfExport">Simpan cadangan (.json)</button><label class="btn ghost" for="pfImport" style="cursor:pointer">Pulihkan dari cadangan</label><input type="file" id="pfImport" accept=".json,application/json" hidden></div>
+        <div class="pf-io"><button class="btn ghost" type="button" id="pfNotif">Aktifkan notifikasi desktop</button><label class="halalnote" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="notifRefresh" checked> Notifikasi desktop setiap refresh bila ada sinyal baru</label><button class="btn ghost" type="button" id="pfExport">Simpan cadangan (.json)</button><label class="btn ghost" for="pfImport" style="cursor:pointer">Pulihkan dari cadangan</label><input type="file" id="pfImport" accept=".json,application/json" hidden></div>
         <p class="halalnote">Data portofolio tersimpan di browser untuk file ini. Jika file dipindah/diganti nama atau cache browser dihapus, pulihkan dari file cadangan.</p></div>
     </div>
   </section>
@@ -439,6 +453,7 @@ body.locked header,body.locked main{visibility:hidden}
         <li><b>Rekomendasi screener</b>: BELI jika sinyal &gt; 6 bulan atau 3 bulan lolos (atau sinyal trading lolos saat pasar stabil dan risiko gorengan rendah); HINDARI jika indikasi gorengan tinggi, fundamental sangat lemah, atau tren turun di semua horizon; selain itu PANTAU dulu.</li>
         <li><b>Golden cross</b>: MA pendek memotong MA panjang dari bawah ke atas (sinyal naik/bullish). <b>Death cross</b>: memotong dari atas ke bawah (sinyal turun/bearish). Dipantau dua pasang: MA50×MA200 (tren utama) dan MA20×MA50 (swing). "Hari ini" = persilangan di sesi terakhir; "baru" = jarak kedua MA &lt; 3% dan masih melebar searah; "menjelang golden" = MA50 &lt; 1,5% di bawah MA200 dan mendekat.</li>
         <li><b>Trading harian ≥3%</b>: 10 syarat (likuid ≥ Rp20 M, ATR ≥ 3,5%, harga &gt; MA20, tren golden, RSI 50–72, MACD &gt; sinyal, Stochastic naik, volume ≥ 1×, tutup menguat, bukan gorengan). Target 1 = +3%, target 2 = +1 ATR, stop loss = −1,5% atau −0,5 ATR. Tutup posisi di hari yang sama.</li>
+        <li><b>Batas cut loss/profit manual</b> di portofolio: isi persen (mis. 7% = 7% dari harga rata-rata) atau harga (mis. 2900). Kosongkan untuk kembali ke batas otomatis sesuai rencana simpan. Setelah harga separuh jalan ke target, stop otomatis naik ke titik impas.</li>
         <li>Kurang dari 5 kandidat lolos → slot diisi skor tertinggi berikutnya (fundamental ≥60%), label <b>Watchlist</b>.</li>
       </ul></div>
     </div>
@@ -901,7 +916,8 @@ function sessionLabel(d){
 }
 function setStatus(state,txt){ $('#dot').className='dot '+state; $('#liveTxt').textContent=txt; }
 
-async function refresh(){
+async function refresh(why){
+  var prevSum=LAST_SUM||lsGet('rsi_last_sum');
   var rb=$('#refreshBtn'); rb.disabled=true; setStatus('busy','Mengambil data terbaru…');
   var src;
   try{ src=await fetchLive(); }
@@ -915,7 +931,46 @@ async function refresh(){
   if(src.live){ $('#banner').hidden=true; setStatus('on','LIVE · '+sessionLabel(src.at)+' · diambil '+src.at.toLocaleString('id-ID',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+' · '+D.stocks.length+' saham'); }
   else setStatus('off','SNAPSHOT · '+src.at.toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}));
   rb.disabled=false;
-  renderAll();
+  await renderAll();
+  var sum=makeSummary(); LAST_SUM=sum; lsSet('rsi_last_sum',sum);
+  refreshToast(sum,prevSum,why,src);
+}
+var LAST_SUM=null, LAST_ALERTS=[];
+function makeSummary(){
+  var U=D.universe, ih=(D.indices||[])[0]||{};
+  return { at:D.at.getTime(), ihsg:ih.c, ihchg:ih.chg,
+    dt:ENGINE.dayPicks(U,8).filter(function(o){return o.dt.ok}).map(function(o){return o.t}),
+    gc:U.filter(function(o){return o.xmaj&&o.xmaj.t==='golden'&&(o.xmaj.st==='today'||o.xmaj.st==='fresh')}).map(function(o){return o.t}),
+    dc:U.filter(function(o){return o.xmaj&&o.xmaj.t==='death'&&(o.xmaj.st==='today'||o.xmaj.st==='fresh')}).map(function(o){return o.t}),
+    buy:U.filter(function(o){return o.q&&o.q.r==='BELI'}).map(function(o){return o.t}),
+    al:LAST_ALERTS.map(function(a){return a.t+'|'+a.k}) };
+}
+function refreshToast(s,p,why,src){
+  var diff=function(a,b){b=b||[];return (a||[]).filter(function(x){return b.indexOf(x)<0})};
+  var lines=[], nDt=diff(s.dt,p&&p.dt), nGc=diff(s.gc,p&&p.gc), nDc=diff(s.dc,p&&p.dc), nBuy=diff(s.buy,p&&p.buy), nAl=diff(s.al,p&&p.al);
+  var urgent=LAST_ALERTS.filter(function(a){return a.lvl>=3});
+  if(urgent.length) lines.push('<b class="down">🔔 '+urgent.length+' posisi portofolio perlu tindakan:</b> '+urgent.map(function(a){return a.t+' '+a.lab.toLowerCase()}).join(', '));
+  else if(LAST_ALERTS.length) lines.push('🔔 '+LAST_ALERTS.length+' notifikasi portofolio: '+LAST_ALERTS.map(function(a){return a.t+' '+a.lab.toLowerCase()}).join(', '));
+  if(p){
+    if(nDt.length) lines.push('⚡ Kandidat trading harian baru: <b>'+nDt.join(', ')+'</b>');
+    if(nGc.length) lines.push('▲ Golden cross baru: <b>'+nGc.join(', ')+'</b>');
+    if(nDc.length) lines.push('▼ Death cross baru: <b>'+nDc.join(', ')+'</b>');
+    if(nBuy.length) lines.push('Masuk rekomendasi BELI: <b>'+nBuy.slice(0,8).join(', ')+'</b>'+(nBuy.length>8?' …':''));
+    if(!nDt.length&&!nGc.length&&!nDc.length&&!nBuy.length) lines.push('Tidak ada sinyal baru dibanding pembaruan sebelumnya.');
+  } else {
+    lines.push('Trading harian siap: <b>'+(s.dt.join(', ')||'–')+'</b> · Golden cross baru: <b>'+(s.gc.join(', ')||'–')+'</b> · Death cross baru: <b>'+(s.dc.join(', ')||'–')+'</b>');
+  }
+  var head=(src&&src.live?'Data diperbarui':'Data offline dimuat')+' · '+new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})+(s.ihsg?' · IHSG '+fmt(s.ihsg,0)+' ('+pct(s.ihchg,2)+')':'')+(why==='auto'?' · auto refresh':'');
+  var box=$('#toast'); box.innerHTML='<div class="toast-h"><b>'+head+'</b><button type="button" aria-label="Tutup" id="toastX">×</button></div>'+lines.map(function(l){return '<div>'+l+'</div>'}).join('');
+  box.className='toast '+(urgent.length?'urgent':''); box.hidden=false;
+  $('#toastX').onclick=function(){box.hidden=true};
+  clearTimeout(box._t); box._t=setTimeout(function(){box.hidden=true},urgent.length?60000:15000);
+  // notifikasi desktop setelah refresh: hanya jika ada hal baru / mendesak
+  var important=urgent.length||(p&&(nDt.length||nGc.length||nDc.length||nAl.length));
+  if(important&&window.Notification&&Notification.permission==='granted'&&$('#notifRefresh').checked){
+    var tmp=document.createElement('div'); tmp.innerHTML=lines.join(' · ');
+    try{ new Notification('Radar Saham · '+head,{body:tmp.textContent.slice(0,240),tag:'rsi-refresh'}); }catch(e){}
+  }
 }
 
 /* ---------- render ---------- */
@@ -1151,6 +1206,9 @@ window.__pfPrefill=function(t,p){$('#pfT').value=t;$('#pfP').value=p;$('#pfL').f
 
 function money(x){return (x<0?'−':'')+'Rp'+fmt(Math.abs(x))}
 var HZ={d3:['3 hari',5],w1:['1 minggu',7],w2:['2 minggu',14],m3:['3 bulan',91],long:['> 1 tahun',365]};
+function parseLim(x,avg,dir){ if(!x) return null; x=String(x).trim().replace(/\s/g,'').replace(',','.'); if(!x) return null;
+  if(/%$/.test(x)){ var v=Math.abs(parseFloat(x)); if(!(v>0)) return null; return avg*(1+dir*v/100); }
+  var n=parseFloat(x.replace(/\./g,'')); return n>0?n:null; }
 function daysSince(d){if(!d)return 0;var x=new Date(d+'T00:00:00');return isNaN(x)?0:Math.max(0,Math.floor((Date.now()-x)/864e5))}
 function planHolding(h,s,fb,fs){
   var hz=h.hz||'m3', p=s.p, avg=h.avg, a=s.atr||p*0.03, tp, sl;
@@ -1164,6 +1222,9 @@ function planHolding(h,s,fb,fs){
   var trail=null;
   if(p>=tp){trail=Math.max(be,p-1*a)}
   else if(p>=avg+(tp-avg)*0.5){trail=be}
+  var slC=parseLim(h.slx,avg,-1), tpC=parseLim(h.tpx,avg,1);
+  if(slC) sl=slC; if(tpC) tp=tpC;
+  if(tpC){ trail=null; if(p>=tp) trail=Math.max(be,p-1*a); else if(p>=avg+(tp-avg)*0.5) trail=be; }
   var stop=rDn(trail?Math.max(sl,trail):sl), target=rUp(tp);
   var held=daysSince(h.since), lim=HZ[hz][1], pl=(p*(1-fs)-avg*(1+fb))*h.lots*100, plPct=(p*(1-fs)/(avg*(1+fb))-1)*100;
   var vv=ENGINE.verdict(s,hz).v, st;
@@ -1175,7 +1236,7 @@ function planHolding(h,s,fb,fs){
   else if((target-p)/p<0.02) st={k:'neartp',lvl:1,lab:'DEKAT TARGET',msg:'Harga tinggal '+pct((target/p-1)*100,1)+' lagi ke target Rp'+fmt(target)+'. Siapkan order jual di target.'};
   else if(vv==='JUAL') st={k:'flip',lvl:2,lab:'SINYAL BERBALIK',msg:'Sinyal horizon '+HZ[hz][0]+' berubah menjadi JUAL. Pertimbangkan keluar lebih awal atau naikkan stop.'};
   else st={k:'ok',lvl:0,lab:'SESUAI RENCANA',msg:'Tahan. Hari ke-'+held+' dari '+HZ[hz][0]+'. Jual di target Rp'+fmt(target)+' atau bila turun ke stop Rp'+fmt(stop)+'.'};
-  return {hz:hz,target:target,stop:stop,held:held,st:st,plPct:plPct};
+  return {hz:hz,target:target,stop:stop,held:held,st:st,plPct:plPct,slC:!!slC,tpC:!!tpC};
 }
 function adviseHolding(h,s,fb,fs){
   var p=s.p, avg=h.avg, sh=h.lots*100, atr=s.atr||p*0.03;
@@ -1233,7 +1294,9 @@ async function renderPortfolio(){
       '<td class="n">'+fmt(h.lots)+'</td><td class="n">'+fmt(h.avg,h.avg%1?2:0)+'</td><td class="n">'+fmt(s.p)+' <small class="'+cls(s.chg)+'">'+pct(s.chg,2)+'</small></td>'+
       '<td class="n">Rp'+fmt(a.val)+'</td><td class="n '+cls(a.pl)+'"><b>'+(a.pl>=0?'+':'−')+'Rp'+fmt(Math.abs(a.pl))+'</b><br><small>'+pct(a.plPct,2)+'</small></td>'+
       '<td><select class="hzsel" data-hz="'+t+'" aria-label="Rencana simpan '+t+'">'+Object.keys(HZ).map(function(k){return '<option value="'+k+'"'+(k===pl.hz?' selected':'')+'>'+HZ[k][0]+'</option>'}).join('')+'</select><br><small class="halalnote">hari ke-'+pl.held+' · impas Rp'+fmt(a.be)+'</small></td>'+
-      '<td class="n"><b class="up">'+fmt(pl.target)+'</b> <small>('+pct((pl.target/h.avg-1)*100,1)+')</small><br><b class="down">'+fmt(pl.stop)+'</b> <small>('+pct((pl.stop/h.avg-1)*100,1)+')</small></td>'+
+      '<td class="n lim"><div><span class="halalnote">Profit</span> <b class="up">'+fmt(pl.target)+'</b> <small>('+pct((pl.target/h.avg-1)*100,1)+')</small>'+(pl.tpC?' <span class="man">manual</span>':'')+'</div>'+
+        '<div><span class="halalnote">Cut loss</span> <b class="down">'+fmt(pl.stop)+'</b> <small>('+pct((pl.stop/h.avg-1)*100,1)+')</small>'+(pl.slC?' <span class="man">manual</span>':'')+'</div>'+
+        '<div class="limedit"><input data-lim="tpx" data-t="'+t+'" value="'+esc(h.tpx||'')+'" placeholder="TP otomatis" aria-label="Batas profit '+t+'"><input data-lim="slx" data-t="'+t+'" value="'+esc(h.slx||'')+'" placeholder="CL otomatis" aria-label="Batas cut loss '+t+'"></div></td>'+
       '<td class="why"><span class="st st-'+pl.st.k+'">'+pl.st.lab+'</span><br>'+pl.st.msg+'</td>'+
       '<td class="why"><span class="rec-pill '+a.code+'">'+a.label+'</span><br>'+a.why+(CS[t]?'<br><a href="'+csUrl(t)+'" target="_blank" rel="noopener">'+esc(csShort(t))+' ↗</a>':'')+'</td>'+
       '<td><button class="act" data-sellall="'+t+'">Jual semua @harga kini</button><br><button class="act" data-del="'+t+'">Hapus</button></td></tr>');
@@ -1258,7 +1321,8 @@ function pfTrade(act,t,lots,price,date){
   var id=Date.now()+'-'+Math.random().toString(36).slice(2,6);
   if(act==='buy'){
     var hz=$('#pfH').value;
-    if(h){ h.avg=(h.avg*h.lots+price*lots)/(h.lots+lots); h.lots+=lots; h.hz=hz; } else P.holdings[t]={lots:lots,avg:price,since:date,hz:hz};
+    var slx=$('#pfSL').value.trim(), tpx=$('#pfTP').value.trim();
+    if(h){ h.avg=(h.avg*h.lots+price*lots)/(h.lots+lots); h.lots+=lots; h.hz=hz; if(slx)h.slx=slx; if(tpx)h.tpx=tpx; } else P.holdings[t]={lots:lots,avg:price,since:date,hz:hz,slx:slx,tpx:tpx};
     P.tx.push({id:id,type:'BUY',t:t,lots:lots,price:price,date:date});
     pfSave(P); pfMsg('Tercatat: beli '+lots+' lot '+t+' @Rp'+fmt(price)+'. Harga rata-rata sekarang Rp'+fmt(P.holdings[t].avg,2)+'.',true);
   } else {
@@ -1272,6 +1336,7 @@ function pfTrade(act,t,lots,price,date){
   renderPortfolio();
 }
 function renderAlerts(al){
+  LAST_ALERTS=al.slice();
   al.sort(function(x,y){return y.lvl-x.lvl});
   var box=$('#pfAlerts'), top=$('#alertTop');
   if(!al.length){box.innerHTML='<div class="pf-alert ok">Tidak ada notifikasi: semua posisi sesuai rencana.</div>';top.hidden=true;document.title='Radar Saham IDX Live';return}
@@ -1298,17 +1363,19 @@ $('#pfForm').addEventListener('submit',function(e){
   if(!/^[A-Z]{4}$/.test(t)){pfMsg('Kode saham harus 4 huruf, mis. BBRI.',false);return}
   if(!(l>0)){pfMsg('Jumlah lot harus lebih dari 0.',false);return}
   if(!(p>0)){pfMsg('Harga harus lebih dari 0.',false);return}
-  pfTrade(pfAct,t,l,p,d); $('#pfL').value='';
+  var bad=[$('#pfSL').value,$('#pfTP').value].filter(function(v){return v.trim()&&!parseLim(v,p,1)});
+  if(bad.length){pfMsg('Format batas cut loss/profit tidak valid. Contoh: 7% atau 2900.',false);return}
+  pfTrade(pfAct,t,l,p,d); $('#pfL').value=''; $('#pfSL').value=''; $('#pfTP').value='';
 });
 ['#pfFb','#pfFs'].forEach(function(id){$(id).addEventListener('change',function(){var P=pfLoad();P.fb=+$('#pfFb').value||0;P.fs=+$('#pfFs').value||0;pfSave(P);renderPortfolio()})});
 $('#pfTbl').addEventListener('click',function(e){
   var b=e.target.closest('button');
   if(b&&b.dataset.del){ if(b.dataset.confirm!=='1'){b.dataset.confirm='1';b.textContent='Klik lagi untuk hapus';return} var P=pfLoad();delete P.holdings[b.dataset.del];pfSave(P);renderPortfolio();return; }
   if(b&&b.dataset.sellall){ var t=b.dataset.sellall,P=pfLoad(),h=P.holdings[t],s=BY[t]; if(h&&s) pfTrade('sell',t,h.lots,s.p,$('#pfD').value); return; }
-  if(e.target.closest('select,a')) return;
+  if(e.target.closest('select,a,input')) return;
   var tr=e.target.closest('tbody tr'); if(tr&&tr.dataset.t) showDetail(tr.dataset.t,true);
 });
-$('#pfTbl').addEventListener('change',function(e){var sel=e.target.closest('select[data-hz]');if(!sel)return;var P=pfLoad();if(P.holdings[sel.dataset.hz]){P.holdings[sel.dataset.hz].hz=sel.value;pfSave(P);renderPortfolio();pfMsg('Rencana simpan '+sel.dataset.hz+' diubah ke '+HZ[sel.value][0]+'.',true)}});
+$('#pfTbl').addEventListener('change',function(e){var li=e.target.closest('input[data-lim]');if(li){var P=pfLoad(),h=P.holdings[li.dataset.t];if(h){var v=li.value.trim();if(v&&!parseLim(v,h.avg,1)){pfMsg('Format batas tidak valid. Contoh: 7% atau 2900.',false);return}h[li.dataset.lim]=v;pfSave(P);renderPortfolio();pfMsg('Batas '+(li.dataset.lim==='tpx'?'ambil profit':'cut loss')+' '+li.dataset.t+(v?' diset ke '+v:' kembali otomatis')+'.',true)}return}var sel=e.target.closest('select[data-hz]');if(!sel)return;var P=pfLoad();if(P.holdings[sel.dataset.hz]){P.holdings[sel.dataset.hz].hz=sel.value;pfSave(P);renderPortfolio();pfMsg('Rencana simpan '+sel.dataset.hz+' diubah ke '+HZ[sel.value][0]+'.',true)}});
 $('#pfNotif').addEventListener('click',function(){ if(!window.Notification)return; Notification.requestPermission().then(function(){notifState(); if(Notification.permission==='granted'){ try{ new Notification('Radar Saham IDX',{body:'Notifikasi aktif. Anda akan diberi tahu saat saham perlu cut loss atau ambil untung, selama dashboard terbuka.'}); }catch(e){} } }); });
 notifState();
 $('#pfHist').addEventListener('click',function(e){var b=e.target.closest('button[data-deltx]');if(!b)return;var P=pfLoad();P.tx=P.tx.filter(function(x){return x.id!==b.dataset.deltx});pfSave(P);renderPortfolio()});
@@ -1323,12 +1390,12 @@ $('#pfImport').addEventListener('change',function(){
   rd.readAsText(f); this.value='';
 });
 
-function renderAll(){
+async function renderAll(){
   renderMarket(); renderCross(); renderTabs(); renderRec(); renderTable();
   renderIdxChart();
   showDetail(lastDetail||D.picks.long[0].t,false);
   renderMarketNews();
-  renderPortfolio();
+  await renderPortfolio();
 }
 
 $('#searchForm').addEventListener('submit',async function(e){
@@ -1342,9 +1409,16 @@ $('#refreshBtn').addEventListener('click',function(){refresh()});
 [].forEach.call(document.querySelectorAll('#halalSeg button'),function(b){b.addEventListener('click',function(){fHalal=b.dataset.v;[].forEach.call(document.querySelectorAll('#halalSeg button'),function(x){x.setAttribute('aria-pressed',x===b)});lsSet('rsi_halal',fHalal);if(D)renderRec()})});
 $('#onlyLq45').addEventListener('change',function(){fLq=this.checked;lsSet('rsi_lq',fLq);if(D)renderRec()});
 (function(){var h=lsGet('rsi_halal'),q=lsGet('rsi_lq');if(h){fHalal=h;[].forEach.call(document.querySelectorAll('#halalSeg button'),function(x){x.setAttribute('aria-pressed',x.dataset.v===h)})}if(q){fLq=true;$('#onlyLq45').checked=true}})();
-function setAuto(){ if(timer){clearInterval(timer);timer=null} if($('#auto').checked) timer=setInterval(function(){ if(!document.hidden) refresh(); },5*60*1000); try{localStorage.setItem('rsi_auto',$('#auto').checked?'1':'0')}catch(e){} }
+var nextAt=0, cdTimer=null;
+function setAuto(){
+  if(timer){clearInterval(timer);timer=null}
+  var m=+$('#auto').value||0; lsSet('rsi_auto_min',m);
+  if(m>0){ nextAt=Date.now()+m*60000; timer=setInterval(function(){ nextAt=Date.now()+m*60000; refresh('auto'); },m*60000); } else nextAt=0;
+  if(!cdTimer) cdTimer=setInterval(tickCd,1000); tickCd();
+}
+function tickCd(){ var el=$('#cd'); if(!nextAt){el.textContent='';return} var s=Math.max(0,Math.round((nextAt-Date.now())/1000)); el.textContent='berikutnya '+Math.floor(s/60)+':'+('0'+s%60).slice(-2); }
 $('#auto').addEventListener('change',setAuto);
-try{ var k=localStorage.getItem('rsi_tab'); if(k&&HOR[k]) curTab=k; if(localStorage.getItem('rsi_auto')==='0') $('#auto').checked=false; }catch(e){}
+try{ var k=localStorage.getItem('rsi_tab'); if(k&&HOR[k]) curTab=k; var am=lsGet('rsi_auto_min'); if(am!=null&&[0,5,15,30].indexOf(+am)>=0) $('#auto').value=String(am); }catch(e){}
 /* ---------- login ---------- */
 var AUTH_U='pramustiko', AUTH_H='e0eef127c41318f1d9c3b1c9b5c188f71465a63ce4e72f69feb74a87522b3250', AUTH_SALT='radar-saham-idx|';
 function sha256hex(str){

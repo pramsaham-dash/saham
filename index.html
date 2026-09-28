@@ -17,222 +17,155 @@
     --ink:#0f2a44;
     --muted:#5b7390;
     --white:#ffffff;
-    --shadow:0 10px 30px -12px rgba(30,144,255,.35);
-    --radius:18px;
-    --sidebar-w:270px;
+    --shadow:0 8px 22px -10px rgba(30,144,255,.45);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{
     font-family:'Plus Jakarta Sans',system-ui,sans-serif;
     color:var(--ink);
-    background:
-      radial-gradient(circle at 10% 0%, var(--blue-100) 0, transparent 40%),
-      radial-gradient(circle at 100% 100%, var(--blue-100) 0, transparent 45%),
-      var(--blue-50);
-    display:flex;
+    background:linear-gradient(180deg,var(--blue-50),var(--blue-100));
+    display:flex;flex-direction:column;
     overflow:hidden;
   }
 
-  /* ========== SIDEBAR ========== */
-  .sidebar{
-    width:var(--sidebar-w);
+  /* ========== NAVBAR ATAS ========== */
+  .navbar{
     flex-shrink:0;
-    height:100vh;
-    padding:22px 18px;
+    height:62px;
+    display:flex;align-items:center;gap:18px;
+    padding:0 16px;
     background:var(--white);
-    border-right:1px solid var(--blue-100);
-    display:flex;
-    flex-direction:column;
-    gap:26px;
-    position:relative;
-    z-index:20;
-    transition:transform .3s ease;
+    border-bottom:1px solid var(--blue-100);
+    box-shadow:0 4px 16px -10px rgba(30,144,255,.35);
+    position:relative;z-index:10;
   }
-  .brand{
-    display:flex;align-items:center;gap:12px;
-    padding:6px 6px 18px;
-    border-bottom:1px dashed var(--blue-200);
+  .navbar::after{
+    content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;
+    background:linear-gradient(90deg,var(--blue-300),var(--blue-500),var(--blue-300));
   }
+
+  .brand{display:flex;align-items:center;gap:10px;flex-shrink:0}
   .brand-logo{
-    width:46px;height:46px;border-radius:14px;
+    width:38px;height:38px;border-radius:11px;
     background:linear-gradient(135deg,var(--blue-400),var(--blue-600));
-    display:grid;place-items:center;
-    box-shadow:var(--shadow);
+    display:grid;place-items:center;box-shadow:var(--shadow);
   }
-  .brand-logo svg{width:26px;height:26px}
-  .brand h1{font-size:17px;font-weight:800;letter-spacing:-.3px;line-height:1.15}
-  .brand span{font-size:12px;color:var(--muted);font-weight:500}
+  .brand-logo svg{width:21px;height:21px}
+  .brand h1{font-size:16px;font-weight:800;letter-spacing:-.3px;line-height:1.1}
+  .brand span{font-size:11px;color:var(--muted);font-weight:500}
 
-  .menu-label{
-    font-size:11px;font-weight:700;letter-spacing:1.4px;
-    text-transform:uppercase;color:var(--blue-500);padding:0 8px;
-  }
-  .menu{display:flex;flex-direction:column;gap:10px;margin-top:10px}
-  .menu-item{
-    display:flex;align-items:center;gap:14px;
-    padding:14px;border-radius:14px;
-    border:1px solid transparent;
-    background:transparent;
-    cursor:pointer;text-align:left;
-    font:inherit;color:var(--ink);
-    transition:all .25s ease;
-    position:relative;
-  }
-  .menu-item:hover{background:var(--blue-50);border-color:var(--blue-100);transform:translateX(3px)}
-  .menu-item .ico{
-    width:42px;height:42px;border-radius:12px;flex-shrink:0;
-    display:grid;place-items:center;
-    background:var(--blue-100);color:var(--blue-600);
-    transition:all .25s ease;
-  }
-  .menu-item .ico svg{width:22px;height:22px}
-  .menu-item .txt b{display:block;font-size:14.5px;font-weight:700}
-  .menu-item .txt small{font-size:12px;color:var(--muted)}
-  .menu-item.active{
-    background:linear-gradient(135deg,var(--blue-400),var(--blue-600));
-    color:var(--white);
-    box-shadow:var(--shadow);
-  }
-  .menu-item.active .ico{background:rgba(255,255,255,.22);color:var(--white)}
-  .menu-item.active .txt small{color:rgba(255,255,255,.85)}
-
-  .sidebar-foot{
-    margin-top:auto;
-    padding:16px;border-radius:16px;
-    background:linear-gradient(160deg,var(--blue-50),var(--blue-100));
-    border:1px solid var(--blue-200);
-  }
-  .sidebar-foot .clock{font-size:26px;font-weight:800;color:var(--blue-600);letter-spacing:-.5px}
-  .sidebar-foot .date{font-size:12.5px;color:var(--muted);margin-top:2px}
-  .market{
-    display:inline-flex;align-items:center;gap:7px;
-    margin-top:12px;padding:5px 11px;border-radius:99px;
-    font-size:11.5px;font-weight:700;background:var(--white);
-  }
-  .dot{width:8px;height:8px;border-radius:50%;background:#94a3b8}
-  .market.open .dot{background:#10b981;box-shadow:0 0 0 0 rgba(16,185,129,.6);animation:pulse 1.6s infinite}
-  .market.open{color:#059669}
-  .market.closed{color:var(--muted)}
-  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
-
-  /* ========== MAIN ========== */
-  .main{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh;padding:18px 22px 22px;gap:16px}
-  .topbar{
-    display:flex;align-items:center;justify-content:space-between;gap:14px;
-    padding:14px 18px;border-radius:var(--radius);
-    background:rgba(255,255,255,.85);
-    backdrop-filter:blur(10px);
+  .tabs{
+    display:flex;gap:6px;
+    padding:5px;border-radius:14px;
+    background:var(--blue-50);
     border:1px solid var(--blue-100);
-    box-shadow:0 4px 18px -10px rgba(30,144,255,.25);
+    overflow-x:auto;scrollbar-width:none;
   }
-  .top-left{display:flex;align-items:center;gap:12px;min-width:0}
-  .burger{
-    display:none;width:40px;height:40px;border-radius:11px;border:1px solid var(--blue-200);
-    background:var(--white);color:var(--blue-600);cursor:pointer;place-items:center;flex-shrink:0;
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 16px;border-radius:10px;
+    border:0;background:transparent;cursor:pointer;
+    font:inherit;font-size:13.5px;font-weight:700;color:var(--muted);
+    white-space:nowrap;transition:all .22s ease;
   }
-  .crumb{font-size:12px;color:var(--muted);font-weight:500}
-  .title{font-size:19px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .actions{display:flex;gap:8px;flex-shrink:0}
+  .tab svg{width:18px;height:18px;flex-shrink:0}
+  .tab:hover{color:var(--blue-600);background:var(--white)}
+  .tab.active{
+    color:var(--white);
+    background:linear-gradient(135deg,var(--blue-400),var(--blue-600));
+    box-shadow:var(--shadow);
+  }
+
+  .right{margin-left:auto;display:flex;align-items:center;gap:12px;flex-shrink:0}
+  .status{
+    display:flex;align-items:center;gap:10px;
+    padding:6px 12px;border-radius:11px;
+    background:var(--blue-50);border:1px solid var(--blue-100);
+  }
+  .clock{font-size:14px;font-weight:800;color:var(--blue-600);letter-spacing:-.2px}
+  .market{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700}
+  .dot{width:8px;height:8px;border-radius:50%;background:#94a3b8}
+  .market.open{color:#059669}
+  .market.open .dot{background:#10b981;animation:pulse 1.6s infinite}
+  .market.closed{color:var(--muted)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.6)}70%{box-shadow:0 0 0 7px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+
+  .actions{display:flex;gap:6px}
   .btn{
-    width:40px;height:40px;border-radius:11px;cursor:pointer;
+    width:36px;height:36px;border-radius:10px;cursor:pointer;
     border:1px solid var(--blue-200);background:var(--white);color:var(--blue-600);
     display:grid;place-items:center;transition:all .2s ease;
   }
-  .btn:hover{background:var(--blue-500);color:var(--white);border-color:var(--blue-500);transform:translateY(-2px);box-shadow:var(--shadow)}
-  .btn svg{width:19px;height:19px}
+  .btn:hover{background:var(--blue-500);color:var(--white);border-color:var(--blue-500);box-shadow:var(--shadow)}
+  .btn svg{width:17px;height:17px}
 
+  /* ========== AREA IFRAME ========== */
+  .stage{flex:1;min-height:0;padding:8px;display:flex}
   .frame-wrap{
-    flex:1;position:relative;border-radius:var(--radius);overflow:hidden;
-    background:var(--white);
+    flex:1;position:relative;overflow:hidden;
+    border-radius:14px;background:var(--white);
     border:1px solid var(--blue-100);
-    box-shadow:0 20px 45px -25px rgba(30,144,255,.45);
-  }
-  .frame-wrap::before{
-    content:"";position:absolute;inset:0 0 auto 0;height:4px;z-index:3;
-    background:linear-gradient(90deg,var(--blue-300),var(--blue-500),var(--blue-300));
+    box-shadow:0 14px 34px -22px rgba(30,144,255,.5);
   }
   iframe{width:100%;height:100%;border:0;display:block;background:var(--white)}
 
   .loader{
     position:absolute;inset:0;z-index:5;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
-    background:var(--white);
-    transition:opacity .35s ease;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:var(--white);transition:opacity .35s ease;
   }
   .loader.hide{opacity:0;pointer-events:none}
   .spinner{
-    width:54px;height:54px;border-radius:50%;
+    width:48px;height:48px;border-radius:50%;
     border:5px solid var(--blue-100);border-top-color:var(--blue-500);
     animation:spin .9s linear infinite;
   }
-  .loader p{font-size:14px;color:var(--muted);font-weight:600}
+  .loader p{font-size:13.5px;color:var(--muted);font-weight:600}
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  .overlay{display:none}
-
   /* ========== RESPONSIVE ========== */
-  @media (max-width:860px){
-    .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);box-shadow:20px 0 40px -20px rgba(15,42,68,.3)}
-    .sidebar.open{transform:translateX(0)}
-    .overlay.show{display:block;position:fixed;inset:0;background:rgba(15,42,68,.25);z-index:15}
-    .burger{display:grid}
-    .main{padding:12px}
-    .title{font-size:16px}
-    .actions .btn.hide-sm{display:none}
+  @media (max-width:1000px){
+    .brand-text,.status{display:none}
+  }
+  @media (max-width:640px){
+    .navbar{gap:10px;padding:0 10px;height:56px}
+    .tab{padding:7px 11px;font-size:12.5px}
+    .tab .long{display:none}
+    .btn.hide-sm{display:none}
+    .stage{padding:6px}
   }
 </style>
 </head>
 <body>
 
-<aside class="sidebar" id="sidebar">
+<nav class="navbar">
   <div class="brand">
     <div class="brand-logo">
       <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>
     </div>
-    <div>
+    <div class="brand-text">
       <h1>Saham Hub</h1>
       <span>Pusat pantauan pasar IDX</span>
     </div>
   </div>
 
-  <div>
-    <div class="menu-label">Menu Dashboard</div>
-    <nav class="menu">
-      <button class="menu-item active" data-src="Radar-Saham-IDX.html" data-title="Radar Saham IDX">
-        <span class="ico">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3"/><line x1="12" y1="12" x2="18.5" y2="5.5"/></svg>
-        </span>
-        <span class="txt"><b>Radar Saham IDX</b><small>Pemindai & sinyal saham</small></span>
-      </button>
-      <button class="menu-item" data-src="Dashboard-Saham-Indonesia.html" data-title="Dashboard Saham Indonesia">
-        <span class="ico">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-        </span>
-        <span class="txt"><b>Dashboard Saham</b><small>Ringkasan pasar Indonesia</small></span>
-      </button>
-    </nav>
+  <div class="tabs">
+    <button class="tab active" data-src="Radar-Saham-IDX.html" data-title="Radar Saham IDX">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3"/><line x1="12" y1="12" x2="18.5" y2="5.5"/></svg>
+      Radar<span class="long">&nbsp;Saham IDX</span>
+    </button>
+    <button class="tab" data-src="Dashboard-Saham-Indonesia.html" data-title="Dashboard Saham Indonesia">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      Dashboard<span class="long">&nbsp;Saham Indonesia</span>
+    </button>
   </div>
 
-  <div class="sidebar-foot">
-    <div class="clock" id="clock">--:--:--</div>
-    <div class="date" id="date">-</div>
-    <div class="market closed" id="market"><span class="dot"></span><span id="marketTxt">Bursa Tutup</span></div>
-  </div>
-</aside>
-
-<div class="overlay" id="overlay"></div>
-
-<main class="main">
-  <header class="topbar">
-    <div class="top-left">
-      <button class="burger" id="burger" aria-label="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
-      </button>
-      <div style="min-width:0">
-        <div class="crumb">Dashboard / <span id="crumb">Radar Saham IDX</span></div>
-        <div class="title" id="title">Radar Saham IDX</div>
-      </div>
+  <div class="right">
+    <div class="status">
+      <span class="clock" id="clock">--:--</span>
+      <span class="market closed" id="market"><span class="dot"></span><span id="marketTxt">Bursa Tutup</span></span>
     </div>
     <div class="actions">
       <button class="btn" id="reload" title="Muat ulang">
@@ -245,8 +178,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
       </button>
     </div>
-  </header>
+  </div>
+</nav>
 
+<main class="stage">
   <section class="frame-wrap" id="frameWrap">
     <div class="loader" id="loader">
       <div class="spinner"></div>
@@ -257,34 +192,27 @@
 </main>
 
 <script>
-  const viewer   = document.getElementById('viewer');
-  const loader   = document.getElementById('loader');
-  const items    = document.querySelectorAll('.menu-item');
-  const titleEl  = document.getElementById('title');
-  const crumbEl  = document.getElementById('crumb');
-  const sidebar  = document.getElementById('sidebar');
-  const overlay  = document.getElementById('overlay');
+  const viewer = document.getElementById('viewer');
+  const loader = document.getElementById('loader');
+  const tabs   = document.querySelectorAll('.tab');
 
-  function showLoader(){ loader.classList.remove('hide'); }
+  const showLoader = () => loader.classList.remove('hide');
   viewer.addEventListener('load', () => loader.classList.add('hide'));
 
   function openPage(btn){
-    items.forEach(i => i.classList.remove('active'));
+    tabs.forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    const src = btn.dataset.src, t = btn.dataset.title;
-    titleEl.textContent = t; crumbEl.textContent = t;
-    document.title = t + ' · Saham Hub';
+    document.title = btn.dataset.title + ' · Saham Hub';
     showLoader();
-    viewer.src = src;
-    try { localStorage.setItem('lastDashboard', src); } catch(e){}
-    closeSidebar();
+    viewer.src = btn.dataset.src;
+    try { localStorage.setItem('lastDashboard', btn.dataset.src); } catch(e){}
   }
-  items.forEach(btn => btn.addEventListener('click', () => openPage(btn)));
+  tabs.forEach(btn => btn.addEventListener('click', () => openPage(btn)));
 
   // buka menu terakhir yang dipakai
   try {
     const last = localStorage.getItem('lastDashboard');
-    const match = [...items].find(i => i.dataset.src === last);
+    const match = [...tabs].find(t => t.dataset.src === last);
     if (match && !match.classList.contains('active')) openPage(match);
   } catch(e){}
 
@@ -295,26 +223,20 @@
     if (!document.fullscreenElement) el.requestFullscreen?.(); else document.exitFullscreen?.();
   };
 
-  // sidebar mobile
-  function closeSidebar(){ sidebar.classList.remove('open'); overlay.classList.remove('show'); }
-  document.getElementById('burger').onclick = () => { sidebar.classList.add('open'); overlay.classList.add('show'); };
-  overlay.onclick = closeSidebar;
-
   // jam & status bursa (WIB)
   function tick(){
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-    document.getElementById('clock').textContent =
-      now.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' }).replace(/\./g, ':') + ' WIB';
-    document.getElementById('date').textContent =
-      now.toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    const hh = String(now.getHours()).padStart(2,'0');
+    const mm = String(now.getMinutes()).padStart(2,'0');
+    const ss = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('clock').textContent = `${hh}:${mm}:${ss} WIB`;
 
     const d = now.getDay(), m = now.getHours()*60 + now.getMinutes();
     const isFri = d === 5;
-    const sesi1 = m >= 540 && m < (isFri ? 690 : 720);      // 09:00 – 12:00 (Jumat 11:30)
-    const sesi2 = m >= (isFri ? 840 : 810) && m < 950;       // 13:30 – 15:50 (Jumat 14:00)
+    const sesi1 = m >= 540 && m < (isFri ? 690 : 720);   // 09:00 – 12:00 (Jumat 11:30)
+    const sesi2 = m >= (isFri ? 840 : 810) && m < 950;    // 13:30 – 15:50 (Jumat 14:00)
     const open = d >= 1 && d <= 5 && (sesi1 || sesi2);
-    const mk = document.getElementById('market');
-    mk.className = 'market ' + (open ? 'open' : 'closed');
+    document.getElementById('market').className = 'market ' + (open ? 'open' : 'closed');
     document.getElementById('marketTxt').textContent = open ? 'Bursa Buka' : 'Bursa Tutup';
   }
   tick(); setInterval(tick, 1000);

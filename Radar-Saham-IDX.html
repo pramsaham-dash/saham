@@ -293,6 +293,12 @@ td.lim div{white-space:nowrap}
 .limedit{display:flex;gap:4px;margin-top:4px}
 .limedit input{width:88px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel);font-family:var(--mono);font-size:11.5px}
 .live-h{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:6px}
+.hotstats{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}.hotstats div{border:1px solid var(--line);border-radius:10px;padding:6px 12px;min-width:118px}.hotstats b{display:block;font:600 20px 'IBM Plex Mono',monospace}.hotstats span{font-size:11px;color:var(--ink3)}
+.hotwrap{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px;margin-bottom:12px}.hotchart{position:relative;height:300px}.hotwhy{font-size:12.5px;color:var(--ink2)}.hotwhy ul{margin:4px 0 0;padding-left:18px}.hotwhy li{margin:3px 0}
+@media(max-width:800px){.hotwrap{grid-template-columns:1fr}}
+.tblwrap{overflow-x:auto}.hottbl{width:100%;border-collapse:collapse;font-size:12px}.hottbl th{text-align:left;font-weight:600;color:var(--ink3);font-size:11px;padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}.hottbl td{padding:6px;border-bottom:1px solid var(--line);vertical-align:top}.hottbl tr:not(.flr) td{border-bottom:0}.hottbl tr.flr td{padding-top:0}.hottbl td.n{text-align:right;font-family:'IBM Plex Mono',monospace;white-space:nowrap}.hottbl .fl{font-size:11.5px;color:var(--ink2)}.hottbl .hcek{margin-left:6px;white-space:nowrap}.hottbl .flw{width:0;min-width:100%;white-space:normal}.hottbl tr:not(.flr) td{padding-bottom:2px}.hottbl .fl span{display:inline-block;margin:0 6px 2px 0}
+.hst{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;white-space:nowrap}.hst.ara{background:#d9f2e4;color:#0b6b3a}.hst.dump{background:#fbe0e0;color:#a61b1b}.hst.oth{background:#fff1d6;color:#8a5a00}
+.hlv{font-weight:700;font-size:11px}.hlv.Kuat{color:var(--down)}.hlv.Indikasi{color:#c25e00}.hlv.Waspada{color:#8a7a00}
 .livegrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px;margin-top:6px}
 .lcol{border-top:3px solid var(--na);padding-top:6px;overflow-x:auto}
 .lcol.g{border-top-color:var(--up)} .lcol.l{border-top-color:var(--down)} .lcol.a{border-top-color:var(--accent)} .lcol.mine{border-top-color:var(--warn)}
@@ -311,6 +317,7 @@ td.lim div{white-space:nowrap}
 @media (max-width:860px){.mkt{grid-template-columns:repeat(2,minmax(0,1fr))}.mkt2,.rec-top,.method,.dt-grid2{grid-template-columns:1fr}.picks{grid-template-columns:repeat(2,minmax(0,1fr))}.dt-grid{grid-template-columns:1fr}}
 @media (max-width:520px){.wrap{padding-inline:16px}.picks{grid-template-columns:1fr}.srow{grid-template-columns:110px 1fr 50px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.scnote{font-size:13px;padding:8px 10px;border-radius:8px;background:var(--bg2,rgba(0,0,0,.04));border-left:3px solid var(--up)}.scnote.warn{border-left-color:var(--warn)}
 </style>
 </head>
 <body class="locked">
@@ -367,6 +374,13 @@ td.lim div{white-space:nowrap}
     <div class="panel box" style="margin-top:12px">
       <div class="live-h"><h3>Harga live hari ini</h3><span class="halalnote" id="liveNote"></span></div>
       <div class="livegrid" id="livePanel"></div>
+    </div>
+    <div class="panel box hotbox" style="margin-top:12px" id="hotBox">
+      <div class="live-h"><h3>Radar saham gorengan hari ini</h3><span class="halalnote" id="hotNote">Memuat…</span></div>
+      <div class="hotstats" id="hotStats"></div>
+      <div class="hotwrap"><div class="hotchart"><canvas id="hotChart"></canvas></div><div class="hotwhy" id="hotWhy"></div></div>
+      <div class="tblwrap"><table class="hottbl" id="hotTbl"></table></div>
+      <p class="halalnote" id="hotFoot"></p>
     </div>
     <div class="panel box" style="margin-top:12px">
       <h3>Golden cross &amp; death cross</h3>
@@ -794,6 +808,89 @@ var ENGINE = (function () {
     return picks;
   }
 
+  // scalping: mode "siang" (sesi 2 hari ini, pakai range intraday) atau "besok" (sesi 1 besok, pakai pivot dari H/L/C hari ini)
+  function scalp(o, mode) {
+    var p = o.p, H = o.high, L = o.low, O = o.open;
+    if (H == null || L == null || O == null || !(H >= L) || !p) return null;
+    var rng = H - L, rngPct = L ? rng / L * 100 : 0, tk = tickSize(p), tkPct = tk / p * 100, pos = rng > 0 ? (p - L) / rng : 0.5;
+    var Pv = (H + L + p) / 3, R1 = 2 * Pv - L, S1 = 2 * Pv - H, R2 = Pv + rng, S2 = Pv - rng;
+    var liq = nz(o.vt, 0) >= 10 || nz(o.val, 0) >= 50;
+    var ck = [
+      ["Likuid (transaksi hari ini ≥ Rp10 M)", liq, "Rp" + r1(o.vt != null ? o.vt : o.val) + " M"],
+      ["Fraksi harga kecil (1 tick ≤ 0,4%)", tkPct <= 0.4, "tick Rp" + tk + " = " + r1(tkPct) + "%"],
+      ["Rentang intraday ≥ 1,5%", rngPct >= 1.5, r1(rngPct) + "%"],
+      ["Volatilitas harian (ATR) 2–7%", nz(o.atrp, 0) >= 2 && nz(o.atrp, 0) <= 7, r1(o.atrp) + "%"],
+      ["Bukan saham gorengan tinggi", o.gor && o.gor.lvl !== "Tinggi" && !o.risk, o.gor ? o.gor.lvl : ""]
+    ];
+    var buyLo, buyHi, tp1, tp2, sl;
+    if (mode === "siang") {
+      ck.push(["Harga di atas pembukaan", p >= O, "open " + r1(O)]);
+      ck.push(["Posisi di separuh atas range hari ini", pos >= 0.5, Math.round(pos * 100) + "%"]);
+      ck.push(["Volume ramai (≥ 0,8× rata-rata)", nz(o.rv, 0) >= 0.8, r1(o.rv) + "×"]);
+      buyLo = rnd(Math.max(L, Pv - 0.1 * rng), false); buyHi = rnd(Math.max(buyLo, Math.min(p, Pv + 0.15 * rng)), true);
+      tp1 = rnd(Math.max(H, buyHi * 1.01), true); tp2 = rnd(Math.max(R1, tp1 + tk), true); sl = rnd(L - tk, false);
+    } else {
+      ck.push(["Tutup kuat (di atas pivot)", p > Pv, "pivot " + r1(Pv)]);
+      ck.push(["Hari ini menguat", nz(o.chg, 0) > 0, r1(o.chg) + "%"]);
+      ck.push(["Tren swing mendukung (MA20 × MA50)", !!(o.xswg && o.xswg.bull), o.xswg ? o.xswg.txt : ""]);
+      ck.push(["RSI 45–75", nz(o.rsi, 0) >= 45 && nz(o.rsi, 0) <= 75, "RSI " + r1(o.rsi)]);
+      buyLo = rnd(Math.max(S1, Pv - 0.5 * (Pv - S1)), false); buyHi = rnd(Math.max(buyLo, Math.min(p, Pv)), true);
+      tp1 = rnd(Math.max(R1, buyHi * 1.01), true); tp2 = rnd(Math.max(R2, tp1 + tk), true); sl = rnd(Math.min(S1 - tk, buyLo - 2 * tk), false);
+    }
+    var pass = ck.filter(function (c) { return c[1]; }).length, hard = ck[0][1] && ck[1][1] && ck[4][1];
+    var mid = (buyLo + buyHi) / 2, up1 = (tp1 / mid - 1) * 100, up2 = (tp2 / mid - 1) * 100, dn = (1 - sl / mid) * 100;
+    var ok = hard && pass >= ck.length - 1 && up1 >= 0.8 && dn > 0 && up1 / dn >= 1;
+    var sc = pass * 10 + clip(rngPct, 0, 6) * 3 + clip(nz(o.vt, nz(o.val, 0) / 3), 0, 300) / 20 + (mode === "siang" ? pos * 10 : clip(nz(o.chg, 0), -3, 6) * 2) - tkPct * 10;
+    return { mode: mode, ok: ok, hard: hard, pass: pass, n: ck.length, checks: ck, sc: sc, buyLo: buyLo, buyHi: buyHi, tp1: tp1, tp2: tp2, sl: sl, up1: up1, up2: up2, dn: dn,
+             pivot: Pv, r1: R1, s1: S1, r2: R2, s2: S2, O: O, H: H, L: L, rngPct: rngPct, tkPct: tkPct, pos: pos };
+  }
+  function scalpPicks(universe, mode, n) {
+    var c = universe.map(function (o) { o["sc_" + mode] = scalp(o, mode); return o; }).filter(function (o) { var z = o["sc_" + mode]; return z && z.hard; })
+      .sort(function (a, b) { var x = a["sc_" + mode], y = b["sc_" + mode]; return (y.ok - x.ok) || (y.sc - x.sc); });
+    return c.slice(0, n || 8);
+  }
+
+  // deteksi saham yang sedang "digoreng" hari ini dari data intraday seluruh bursa
+  var HOT_COLS = ["name","description","close","change","open","high","low","relative_volume_10d_calc","Value.Traded","market_cap_basic","float_shares_percent_current","Perf.W","Perf.1M","Perf.YTD","price_earnings_ttm","price_book_fq","Volatility.D","indexes","update_mode","average_volume_10d_calc"];
+  function araPct(prev) { return prev <= 200 ? 35 : prev <= 5000 ? 25 : 20; }
+  function hot(d) {
+    var o = {}; HOT_COLS.forEach(function (c, i) { o[c] = d[i]; });
+    var t = o.name, p = o.close, chg = nz(o.change, 0), H = o.high, L = o.low, O = o.open;
+    if (!p || typeof t !== 'string') return null;
+    var prev = p / (1 + chg / 100), ara = araPct(prev), rv = nz(o.relative_volume_10d_calc, 0), vt = nz(o["Value.Traded"], 0) / 1e9, mc = nz(o.market_cap_basic, 0) / 1e9;
+    var ix = (Array.isArray(o.indexes) ? o.indexes : []).filter(Boolean).map(function (x) { return x.name || x.proname || String(x); }).join(" "), major = /LQ45|KOMPAS100|IDX80/.test(ix);
+    var f = [], pts = 0, add = function (n, s) { pts += n; f.push(s); }, st = "";
+    var locked = H != null && L != null && H === L && Math.abs(chg) >= ara - 1;
+    if (chg >= ara - 1) { add(3, "Sentuh batas ARA (+" + ara + "% untuk harga acuan " + Math.round(prev) + ")"); st = locked ? "ARA terkunci" : "ARA"; }
+    else if (chg >= 10) { add(2, "Naik tajam " + r1(chg) + "% dalam sehari"); st = "Naik tajam"; }
+    else if (chg <= -14) { add(3, "Anjlok " + r1(chg) + "% (batas ARB ±15%), indikasi barang dibuang"); st = H != null && H === L ? "ARB terkunci" : "Dibuang"; if (st === "ARB terkunci") add(1, "Terkunci di ARB (open = high = low), antrean jual tanpa pembeli"); }
+    else if (chg <= -8) { add(2, "Turun tajam " + r1(chg) + "%"); st = "Turun tajam"; }
+    else if (chg >= 5) { add(1, "Naik " + r1(chg) + "% hari ini"); st = "Naik"; }
+    if (locked) add(1, "Harga terkunci sejak pembukaan (open = high = low), antrean tanpa lawan");
+    if (!st && rv >= 10) st = "Volume abnormal";
+    if (rv >= 10) add(3, "Volume " + r1(rv) + "× rata-rata 10 hari"); else if (rv >= 5) add(2, "Volume " + r1(rv) + "× rata-rata"); else if (rv >= 3) add(1, "Volume " + r1(rv) + "× rata-rata");
+    if (mc && mc < 500) add(2, "Kapitalisasi sangat kecil (Rp" + Math.round(mc) + " M)"); else if (mc && mc < 2000) add(1, "Kapitalisasi kecil (Rp" + r1(mc / 1000) + " T)");
+    if (p < 100) add(1, "Saham recehan (< Rp100), 1 tick = " + r1(100 / p) + "%");
+    if (o.float_shares_percent_current != null && o.float_shares_percent_current < 20) add(1, "Free float kecil (" + r1(o.float_shares_percent_current) + "%)");
+    var m1 = nz(o["Perf.1M"], 0), ytd = nz(o["Perf.YTD"], 0);
+    if (m1 >= 50 || ytd >= 200) add(2, "Sudah naik " + r1(m1) + "% sebulan / " + r1(ytd) + "% YTD"); else if (m1 >= 25) add(1, "Naik " + r1(m1) + "% dalam sebulan");
+    var per = o.price_earnings_ttm, pbv = nz(o.price_book_fq, 0);
+    if (pbv > 10 || (per != null && per > 100)) add(2, "Valuasi ekstrem (PBV " + r1(pbv) + "×" + (per != null ? ", PER " + r1(per) + "×" : ", rugi") + ")");
+    else if (per == null && pbv > 3) add(1, "Perusahaan rugi dengan PBV " + r1(pbv) + "×");
+    if (H != null && L != null && H > L && chg > 0 && (H - p) / (H - L) >= 0.6) add(1, "Ekor atas panjang: naik ke " + H + " lalu diguyur ke " + p + " (distribusi)");
+    if (mc && vt / mc >= 0.03) add(1, "Perputaran tinggi: transaksi " + r1(vt / mc * 100) + "% dari kapitalisasi dalam sehari");
+    if (!major) add(1, "Bukan anggota LQ45/KOMPAS100/IDX80");
+    if (RISK[t]) add(3, RISK[t]);
+    var lvl = pts >= 11 ? "Kuat" : pts >= 8 ? "Indikasi" : pts >= 5 ? "Waspada" : null;
+    return { t: t, n: o.description, p: p, chg: chg, O: O, H: H, L: L, prev: prev, ara: ara, rv: rv, vt: vt, mc: mc, ff: o.float_shares_percent_current, w: o["Perf.W"], m1: m1, ytd: ytd, per: per, pbv: pbv, volD: o["Volatility.D"], major: major, st: st, pts: pts, lvl: lvl, flags: f, upd: o.update_mode };
+  }
+  function hotList(rows, n) {
+    var seen = {}, out = [];
+    rows.forEach(function (d) { var h = hot(d); if (h && h.lvl && !seen[h.t]) { seen[h.t] = 1; out.push(h); } });
+    return out.sort(function (a, b) { return (b.pts - a.pts) || (b.rv - a.rv); }).slice(0, n || 20);
+  }
+  function tickSize(p) { return p < 200 ? 1 : p < 500 ? 2 : p < 2000 ? 5 : p < 5000 ? 10 : 25; }
+
   function dayPicks(universe, n) {
     var c = universe.filter(function (o) { return o.dt && o.dt.hard; }).sort(function (a, b) { return (b.dt.ok - a.dt.ok) || (b.dt.sc - a.dt.sc); });
     return c.slice(0, n || 8);
@@ -810,7 +907,7 @@ var ENGINE = (function () {
     return { stocks: stocks, universe: universe, ind: IND, picks: picks };
   }
 
-  return { COLS: COLS, dayPicks: dayPicks, quick: quick, run: run, pick: pick, setMembership: setMembership, verdict: verdict, plan: plan, analyze: analyze, toObj: toObj, industryMedians: industryMedians, ORDER: ORDER, KEYS: KEYS };
+  return { COLS: COLS, HOT_COLS: HOT_COLS, hot: hot, hotList: hotList, scalp: scalp, scalpPicks: scalpPicks, dayPicks: dayPicks, quick: quick, run: run, pick: pick, setMembership: setMembership, verdict: verdict, plan: plan, analyze: analyze, toObj: toObj, industryMedians: industryMedians, ORDER: ORDER, KEYS: KEYS };
 })();
 if (typeof module !== "undefined") module.exports = ENGINE;
 </script>
@@ -836,6 +933,8 @@ var cls=function(v){return v==null?'flat':v>0?'up':v<0?'down':'flat'};
 var rp=function(v){if(v==null||!isFinite(v))return '–';var a=Math.abs(v);return (v<0?'-':'')+(a>=1000?'Rp'+fmt(a/1000,a>=10000?0:1)+' T':'Rp'+fmt(a,0)+' M')};
 var HOR={
   dt:{lb:'Trading harian ≥3%',sh:'jual hari yang sama',desc:'Saham likuid dengan rentang harian lebar dan momentum naik, untuk dibeli pagi dan dijual di hari yang sama dengan target minimal +3%. Wajib stop loss; jika target belum tercapai menjelang penutupan (±15:45 WIB), tutup posisi.',rules:['Transaksi ≥ Rp20 M/hari dan ATR ≥ 3,5% (rentang harian cukup untuk +3%)','Harga > MA20, tren MA golden, RSI 50–72','MACD > sinyal, Stochastic naik, volume ≥ 1×, tutup menguat','Bukan saham gorengan tinggi'],range:'1M'},
+  sg:{lb:'Scalping siang ini',sh:'sesi 2 hari ini',desc:'Saham likuid dengan fraksi harga kecil dan rentang intraday lebar yang masih kuat di sesi 1, untuk scalping cepat di sesi 2 (Senin–Kamis 13:30–15:49, Jumat 14:00–15:49 WIB). Masuk di range beli dekat pivot intraday, ambil untung di TP1 (tertinggi hari ini) atau TP2 (R1), keluar disiplin bila tembus SL.',rules:['Transaksi hari ini ≥ Rp10 M, 1 tick ≤ 0,4%','Rentang intraday ≥ 1,5%, ATR 2–7%, bukan gorengan','Harga di atas open, di separuh atas range, volume ≥ 0,8×'],range:'1D'},
+  sb:{lb:'Scalping besok pagi',sh:'sesi 1 pembukaan',desc:'Kandidat scalping pembukaan besok (sesi 1 mulai 09:00 WIB) berdasarkan penutupan hari ini: tutup kuat di atas pivot, tren swing mendukung. Range beli di antara S1 dan pivot; jangan kejar harga bila gap up melebihi range, tunggu pullback 15–30 menit pertama.',rules:['Transaksi ≥ Rp10 M, 1 tick ≤ 0,4%, bukan gorengan','Tutup di atas pivot, hari ini menguat, MA20 > MA50','RSI 45–75, ATR 2–7%, rentang ≥ 1,5%'],range:'1D'},
   long:{lb:'> 6 Bulan',sh:'jangka panjang',desc:'Bisnis berkualitas untuk disimpan lama: pendapatan dan laba tumbuh bertahun-tahun, margin di atas industri, utang rendah, arus kas kuat, valuasi masuk akal. Beli bertahap di zona beli.',rules:['Skor fundamental ≥ 85%','Wajib lolos: pendapatan tumbuh, laba inti naik, DER < 1','ROE ≥ 12%, PER 0–35×, transaksi ≥ Rp5 M/hari'],range:'12M'},
   m3:{lb:'3 Bulan',sh:'~60 hari bursa',desc:'Fundamental sehat yang sedang dalam tren naik menengah. Evaluasi tiap bulan; keluar bila harga ditutup di bawah SL.',rules:['Skor fundamental ≥ 70%','Harga > MA50, MA50 ≥ 0,97× MA200','Return 3 bulan positif'],range:'3M'},
   w2:{lb:'2 Minggu',sh:'~10 hari bursa',desc:'Momentum swing: harga di atas MA20 & MA50, MACD menguat, RSI belum jenuh beli.',rules:['Harga > MA20 > MA50','MACD > sinyal, RSI 48–72','Return 1 bulan positif, fundamental ≥ 50%'],range:'1M'},
@@ -956,6 +1055,7 @@ async function refresh(why){
   if(src.live){ $('#banner').hidden=true; setStatus('on','LIVE · '+sessionLabel(src.at)+' · diambil '+src.at.toLocaleString('id-ID',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+' · '+D.stocks.length+' saham'); }
   else setStatus('off','SNAPSHOT · '+src.at.toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}));
   rb.disabled=false;
+  var hotP=loadHot(!!src.live);
   await renderAll();
   var sum=makeSummary(); LAST_SUM=sum; lsSet('rsi_last_sum',sum);
   refreshToast(sum,prevSum,why,src);
@@ -1077,7 +1177,7 @@ function crossDetail(s){
   return '<div class="cs-grid" style="grid-template-columns:1fr 1fr"><div class="gor-box" style="border-left-color:'+(s.xmaj&&s.xmaj.bull?'var(--up)':'var(--down)')+'"><div class="eyebrow">Golden / death cross</div><div class="xlinks">Lihat grafik: '+xChartLinks(s.t)+'</div><ul class="vc xrows">'+
     row(s.xmaj,'MA50 × MA200','Tren utama: golden = potensi tren naik kuat, death = fase penurunan.')+row(s.xswg,'MA20 × MA50','Tren swing jangka pendek (1–4 minggu).')+'</ul></div>'+
     '<div class="gor-box" style="border-left-color:'+(q.ok?'var(--up)':q.hard?'var(--warn)':'var(--na)')+'"><div class="eyebrow">Trading harian target ≥3%</div><p style="margin:4px 0 8px">'+(q.ok?'<b class="up">Layak trading harian</b>':q.hard?'<b class="warn-t">Pantau pagi</b>: sebagian syarat belum terpenuhi':'<b>Kurang cocok</b>: likuiditas/rentang harian tidak cukup untuk +3%')+' ('+q.pass+'/'+q.n+' syarat). '+(q.hard?'Beli '+fmt(q.buyLo)+'–'+fmt(q.buyHi)+', target <b class="up">'+fmt(q.tp1)+'</b> (+3%) / '+fmt(q.tp2)+', stop <b class="down">'+fmt(q.sl)+'</b>.':'')+'</p>'+
-    '<ul class="vc">'+q.checks.map(function(c){return '<li>'+chip(c[1])+'<span>'+esc(c[0])+(c[2]?' <small>'+esc(c[2])+'</small>':'')+'</span></li>'}).join('')+'</ul></div></div>';
+    '<ul class="vc">'+q.checks.map(function(c){return '<li>'+chip(c[1])+'<span>'+esc(c[0])+(c[2]?' <small>'+esc(c[2])+'</small>':'')+'</span></li>'}).join('')+'</ul></div></div>'+scalpBox(s);
 }
 function gorPanel(s){var g=s.gor;
   var head=g.lvl==='Tinggi'?'<b class="down">Terindikasi saham gorengan</b> ('+g.pts+' poin risiko). Pola harga, likuiditas, dan valuasinya mirip saham yang digerakkan bandar. Hindari, atau hanya trading sangat singkat dengan stop loss ketat.':g.lvl==='Sedang'?'<b class="warn-t">Waspada</b> ('+g.pts+' poin risiko). Ada beberapa ciri saham gorengan; kurangi ukuran posisi.':'<b class="up">Risiko gorengan rendah</b> ('+g.pts+' poin). Pergerakan harga masih wajar dibanding fundamental dan likuiditasnya.';
@@ -1121,8 +1221,52 @@ function renderDayTrade(){
     {label:'Stop loss',data:picks.map(function(s){return -s.dt.dn.toFixed(1)}),backgroundColor:css('--down'),borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'bottom',labels:{color:ink2,boxWidth:12}}},scales:{x:{stacked:true,ticks:{color:ink2,font:{family:'IBM Plex Mono'}},grid:{display:false}},y:{stacked:true,ticks:{color:ink2,callback:function(v){return v+'%'}},grid:{color:line}}}}});
 }
+function wibNow(){var d=new Date(Date.now()+7*3600e3);return {dow:d.getUTCDay(),m:d.getUTCHours()*60+d.getUTCMinutes()}}
+function sessInfo(mode){var w=wibNow(),fri=w.dow===5,we=w.dow===0||w.dow===6,s2=fri?840:810,cl=949;
+  if(mode==='siang'){ if(we) return ['warn','Hari ini bursa libur (akhir pekan). Range di bawah memakai data perdagangan terakhir; pakai tab Scalping besok pagi untuk hari bursa berikutnya.'];
+    if(w.m<540) return ['warn','Pasar belum buka. Range siang dihitung setelah sesi 1 berjalan (refresh setelah 11:00 WIB).'];
+    if(w.m<(fri?690:720)) return ['on','Sesi 1 sedang berjalan. Range ini untuk sesi 2 ('+(fri?'14:00':'13:30')+'–15:49 WIB); refresh lagi menjelang '+(fri?'14:00':'13:30')+' agar range memakai high/low terbaru.'];
+    if(w.m<s2) return ['on','Istirahat siang. Sesi 2 dibuka '+(fri?'14:00':'13:30')+' WIB; siapkan antrean beli di range.'];
+    if(w.m<cl) return ['on','Sesi 2 sedang berjalan. Tutup semua posisi scalping sebelum 15:49 WIB (pra-penutupan).'];
+    return ['warn','Sesi 2 hari ini sudah tutup. Gunakan tab Scalping besok pagi.']; }
+  var nxt=(w.dow===5&&w.m>=cl)||w.dow===6?'Senin':w.m>=cl||we?'besok':'hari bursa berikutnya';
+  return [w.m>=cl||we?'on':'warn', (w.m>=cl||we?'Dihitung dari data penutupan terakhir. ':'Pasar masih berjalan: range ini sementara, final setelah penutupan 16:00 WIB. ')+'Sesi 1 '+nxt+' dibuka 09:00 WIB (pra-pembukaan 08:45–08:59). Cek ulang range saat pra-pembukaan; jika harga pembukaan sudah di atas batas atas range, jangan kejar.']; }
+function renderScalp(mode){
+  var U=filteredUniverse(), picks=ENGINE.scalpPicks(U,mode,8), h=HOR[mode==='siang'?'sg':'sb'], k='sc_'+mode, nOk=picks.filter(function(o){return o[k].ok}).length, si=sessInfo(mode);
+  var hasIntra=U.some(function(o){return o.open!=null&&o.high!=null});
+  $('#filterNote').textContent=U.length+' saham likuid dianalisis';
+  $('#recDesc').innerHTML='<span class="eyebrow">Scalping · '+(mode==='siang'?'sesi 2 hari ini':'sesi 1 besok')+'</span><h3>'+h.lb+'</h3><p>'+h.desc+'</p><ul class="rules">'+h.rules.map(function(r){return '<li>'+r+'</li>'}).join('')+'</ul>'+
+    '<p class="scnote '+si[0]+'">'+si[1]+'</p><p><b>'+nOk+' saham</b> siap scalping'+(nOk<picks.length?'; sisanya kandidat pantauan (1 syarat belum terpenuhi atau target TP1 < 0,8%).':'.')+' Biaya jual-beli ±0,3–0,4%, jadi TP1 di bawah 1% tipis margin; pakai lot besar hanya pada saham paling likuid.'+(D.mkt&&D.mkt.weak?' <b class="down">Pasar sedang melemah: kecilkan posisi.</b>':'')+'</p>';
+  if(!picks.length){$('#picks').innerHTML='<p class="halalnote">'+(hasIntra?'Belum ada saham yang memenuhi syarat likuiditas, fraksi harga, dan rentang intraday untuk scalping.':'Data intraday (open/high/low) belum tersedia di data offline. Tekan Refresh saat terhubung internet untuk memuat harga live.')+'</p>';if(rrChart){rrChart.destroy();rrChart=null}return}
+  var colors=['--s1','--s2','--s3','--s4','--s5','--s1','--s2','--s3'].map(css);
+  $('#picks').innerHTML=picks.map(function(s,i){var q=s[k], miss=q.checks.filter(function(c){return !c[1]});
+    return '<article class="panel pick" style="--c:'+colors[i]+'"><div class="hd"><button class="tk" data-t="'+s.t+'">'+s.t+'</button>'+(q.ok?'<span class="tag ok">Siap scalping</span>':'<span class="tag watch">Pantau</span>')+'</div>'+
+      '<div class="nm">'+esc(s.n)+'</div><div class="badges">'+badges(s)+(s.gor.lvl!=='Rendah'?gorPill(s):'')+'</div>'+
+      '<div class="px">Rp'+fmt(s.p)+' <span class="'+cls(s.chg)+'" style="font-size:12px">'+pct(s.chg,2)+'</span></div>'+
+      '<div class="plan"><span>Range scalping</span><b>'+fmt(q.buyLo)+' – '+fmt(q.buyHi)+'</b><span>TP1</span><b class="up">'+fmt(q.tp1)+' ('+pct(q.up1)+')</b><span>TP2</span><b class="up">'+fmt(q.tp2)+' ('+pct(q.up2)+')</b><span>Stop loss</span><b class="down">'+fmt(q.sl)+' ('+pct(-q.dn)+')</b><span>Reward/risk</span><b>'+fmt(q.dn>0?q.up1/q.dn:null,2)+'×</b><span>Syarat</span><b>'+q.pass+'/'+q.n+'</b></div>'+
+      '<p class="mono" style="font-size:11px;color:var(--ink3)">O '+fmt(q.O)+' · H '+fmt(q.H)+' · L '+fmt(q.L)+' · rentang '+fmt(q.rngPct,1)+'% · 1 tick '+fmt(q.tkPct,2)+'%<br>S1 '+fmt(q.s1)+' · Pivot '+fmt(q.pivot)+' · R1 '+fmt(q.r1)+' · R2 '+fmt(q.r2)+' · transaksi Rp'+fmt(s.vt!=null?s.vt:s.val,0)+' M</p>'+
+      '<p>'+(miss.length?'Belum terpenuhi: '+esc(miss.map(function(c){return c[0]}).join('; '))+'.':'Semua syarat terpenuhi.')+' '+(mode==='siang'?'Antre beli di range, jual bertahap di TP1/TP2; tutup sebelum 15:49.':'Beli hanya jika harga pagi masuk range dan bertahan di atas pivot; jual di TP1/TP2 di sesi 1.')+'</p>'+
+      '<a class="chartlink" href="https://id.tradingview.com/chart/?symbol=IDX%3A'+s.t+'&interval=1" target="_blank" rel="noopener">Grafik 1 menit '+s.t+' ↗</a> <a class="chartlink" href="https://id.tradingview.com/chart/?symbol=IDX%3A'+s.t+'&interval=5" target="_blank" rel="noopener">5 menit ↗</a>'+
+      '<div class="links"><span class="eyebrow">Berita terbaru</span><div class="nws" id="nws-'+s.t+'"><small>Memuat berita…</small></div><button class="addpf" type="button" onclick="window.__pfPrefill(\''+s.t+'\','+s.p+')">+ Tambah ke portofolio</button></div></article>'}).join('');
+  [].forEach.call($('#picks').querySelectorAll('.tk'),function(b){b.onclick=function(){showDetail(b.dataset.t,true)}});
+  picks.forEach(function(s){fillNews(document.getElementById('nws-'+s.t),s.t,1)});
+  if(rrChart) rrChart.destroy();
+  var ink2=css('--ink2'),line=css('--line');
+  rrChart=new Chart($('#rrChart'),{type:'bar',data:{labels:picks.map(function(s){return s.t}),datasets:[
+    {label:'TP1',data:picks.map(function(s){return +s[k].up1.toFixed(2)}),backgroundColor:css('--up'),borderRadius:4},
+    {label:'TP2 (tambahan)',data:picks.map(function(s){return +(s[k].up2-s[k].up1).toFixed(2)}),backgroundColor:css('--up')+'66',borderRadius:4},
+    {label:'Stop loss',data:picks.map(function(s){return -s[k].dn.toFixed(2)}),backgroundColor:css('--down'),borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'bottom',labels:{color:ink2,boxWidth:12}}},scales:{x:{stacked:true,ticks:{color:ink2,font:{family:'IBM Plex Mono'}},grid:{display:false}},y:{stacked:true,ticks:{color:ink2,callback:function(v){return v+'%'}},grid:{color:line}}}}});
+}
+function scalpBox(s){
+  var one=function(mode,title){var q=ENGINE.scalp(s,mode); if(!q) return '';
+    return '<div class="gor-box" style="border-left-color:'+(q.ok?'var(--up)':q.hard?'var(--warn)':'var(--na)')+'"><div class="eyebrow">'+title+'</div><p style="margin:4px 0 8px">'+(q.ok?'<b class="up">Layak scalping</b>':q.hard?'<b class="warn-t">Pantau</b>':'<b>Kurang cocok</b>')+' ('+q.pass+'/'+q.n+' syarat). Range <b>'+fmt(q.buyLo)+'–'+fmt(q.buyHi)+'</b>, TP1 <b class="up">'+fmt(q.tp1)+'</b> ('+pct(q.up1)+'), TP2 '+fmt(q.tp2)+', SL <b class="down">'+fmt(q.sl)+'</b> ('+pct(-q.dn)+').</p><ul class="vc">'+q.checks.map(function(c){return '<li>'+chip(c[1])+'<span>'+esc(c[0])+'</span></li>'}).join('')+'</ul></div>'};
+  var a=one('siang','Scalping siang ini (sesi 2)'), b=one('besok','Scalping besok pagi (sesi 1)');
+  return a||b?'<div class="cs-grid" style="grid-template-columns:1fr 1fr;margin-top:12px">'+a+b+'</div>':'';
+}
 function renderRec(){
   if(curTab==='dt') return renderDayTrade();
+  if(curTab==='sg'||curTab==='sb') return renderScalp(curTab==='sg'?'siang':'besok');
   var U=filteredUniverse(), lbl=(fHalal==='halal'?'halal (syariah)':fHalal==='non'?'non-halal':'semua jenis')+(fLq?' anggota LQ45':'');
   $('#filterNote').textContent=U.length+' saham likuid '+lbl+' dianalisis';
   var h=HOR[curTab], picks=currentPicks()[curTab]||[], nOk=picks.filter(function(p){return p.ok}).length;
@@ -1433,6 +1577,50 @@ $('#pfImport').addEventListener('change',function(){
   rd.readAsText(f); this.value='';
 });
 
+var hotChart=null;
+async function fetchHot(){
+  var base=[{left:'type',operation:'equal',right:'stock'}];
+  var q=function(sort,min){return fetch(SCAN,{method:'POST',cache:'no-store',body:JSON.stringify({columns:ENGINE.HOT_COLS,filter:base.concat([{left:'Value.Traded',operation:'greater',right:min}]),sort:sort,range:[0,60],markets:['indonesia']})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(j){return (j.data||[]).map(function(x){return x.d})})};
+  var res=await Promise.all([q({sortBy:'change',sortOrder:'desc'},5e8),q({sortBy:'relative_volume_10d_calc',sortOrder:'desc'},1e9),q({sortBy:'change',sortOrder:'asc'},1e9)]);
+  var rows=[].concat(res[0],res[1],res[2]), at=new Date();
+  lsSet('rsi_hot',{rows:rows,at:at.toISOString()});
+  return {rows:rows,at:at,live:true};
+}
+async function loadHot(live){
+  var H=null;
+  if(live){ try{ H=await fetchHot(); }catch(e){ H=null; } }
+  if(!H){ var c=lsGet('rsi_hot'); if(c&&c.rows) H={rows:c.rows,at:new Date(c.at),live:false}; }
+  try{ renderHot(H); }catch(e){ $('#hotNote').textContent='Radar gorengan gagal dimuat: '+e.message; }
+}
+function renderHot(H){
+  if(!H){ $('#hotNote').textContent='Butuh koneksi internet: tekan Refresh saat online untuk memindai seluruh saham BEI.'; $('#hotStats').innerHTML=''; $('#hotTbl').innerHTML=''; $('#hotWhy').innerHTML=''; $('#hotFoot').innerHTML=''; return; }
+  var all=H.rows.map(ENGINE.hot).filter(Boolean), seen={}; all=all.filter(function(h){if(seen[h.t])return false;seen[h.t]=1;return true});
+  var L=ENGINE.hotList(H.rows,20), si=wibNow(), open=si.dow>0&&si.dow<6&&si.m>=540&&si.m<960;
+  var cnt=function(f){return all.filter(f).length};
+  var nAra=cnt(function(h){return h.st==='ARA'||h.st==='ARA terkunci'}), nLock=cnt(function(h){return h.st==='ARA terkunci'}), nDump=cnt(function(h){return h.st==='Dibuang'||h.st==='ARB terkunci'}), nArbL=cnt(function(h){return h.st==='ARB terkunci'}), nVol=cnt(function(h){return h.rv>=5}), nKuat=L.filter(function(h){return h.lvl==='Kuat'}).length;
+  var valHot=L.reduce(function(s,h){return s+h.vt},0);
+  $('#hotNote').textContent=(H.live?'LIVE ':'Data tersimpan ')+H.at.toLocaleString('id-ID',{weekday:'short',hour:'2-digit',minute:'2-digit'})+' WIB · tertunda ±10 menit · dipindai '+all.length+' saham teraktif seluruh BEI'+(open?'':' · pasar tutup, data sesi terakhir');
+  var st=function(v,l,s){return '<div><b>'+v+'</b><span>'+l+(s?'<br>'+s:'')+'</span></div>'};
+  $('#hotStats').innerHTML=st(nKuat,'Indikasi kuat digoreng','skor ≥ 11')+st(L.length,'Masuk radar','skor ≥ 5')+st(nAra,'Sentuh ARA',nLock+' terkunci tanpa lawan')+st(nDump,'Anjlok ≤ −14% (ARB)',nArbL+' terkunci tanpa pembeli')+st(nVol,'Volume ≥ 5× rata-rata','')+st('Rp'+fmt(valHot,1)+' M','Transaksi saham di radar','');
+  if(!L.length){ $('#hotTbl').innerHTML='<tr><td>Tidak ada saham dengan pola gorengan yang menonjol pada data ini.</td></tr>'; $('#hotWhy').innerHTML=''; if(hotChart){hotChart.destroy();hotChart=null} return; }
+  var stc=function(s){return !s?'':'<span class="hst '+(s.indexOf('ARA')===0||s==='Naik tajam'||s==='Naik'?'ara':s==='Dibuang'||s==='ARB terkunci'||s==='Turun tajam'?'dump':'oth')+'">'+s+'</span>'};
+  $('#hotTbl').innerHTML='<thead><tr><th>Saham</th><th>Status</th><th>Harga</th><th>Hari ini</th><th>Open · High · Low</th><th>Volume ×</th><th>Transaksi</th><th>Kapitalisasi</th><th>Free float</th><th>1 bln</th><th>YTD</th><th>PBV · PER</th><th>Skor</th></tr></thead><tbody>'+
+    L.map(function(h){var inU=!!BY[h.t];
+      return '<tr><td><b>'+(inU?'<a href="#analisis" data-t="'+h.t+'" class="hotlink">'+h.t+'</a>':h.t)+'</b><br><small>'+esc(String(h.n||'').slice(0,26))+'</small></td><td>'+stc(h.st)+'</td><td class="n">'+fmt(h.p)+'</td><td class="n '+cls(h.chg)+'">'+pct(h.chg,2)+'</td><td class="n">'+fmt(h.O)+' · '+fmt(h.H)+' · '+fmt(h.L)+'</td><td class="n">'+fmt(h.rv,1)+'×</td><td class="n">Rp'+fmt(h.vt,1)+' M</td><td class="n">'+(h.mc>=1000?'Rp'+fmt(h.mc/1000,2)+' T':'Rp'+fmt(h.mc,0)+' M')+'</td><td class="n">'+(h.ff!=null?fmt(h.ff,0)+'%':'–')+'</td><td class="n '+cls(h.m1)+'">'+pct(h.m1,0)+'</td><td class="n '+cls(h.ytd)+'">'+pct(h.ytd,0)+'</td><td class="n">'+fmt(h.pbv,2)+'× · '+(h.per!=null?fmt(h.per,1)+'×':'rugi')+'</td><td class="n"><span class="hlv '+h.lvl+'">'+h.lvl+'</span><br>'+h.pts+'</td></tr><tr class="flr"><td></td><td colspan="12" class="fl"><div class="flw"><b>Data pendukung:</b> '+h.flags.map(function(f){return '<span>• '+esc(f)+'</span>'}).join('')+'<span class="hcek">Cek: <a href="https://id.tradingview.com/chart/?symbol=IDX%3A'+h.t+'&interval=5" target="_blank" rel="noopener">grafik 5 menit ↗</a> · <a href="'+gnews(h.t)+'" target="_blank" rel="noopener">berita ↗</a> · <a href="https://carisaham.com/emiten/profile/'+h.t+'" target="_blank" rel="noopener">CariSaham ↗</a></span></div></td></tr>'}).join('')+'</tbody>';
+  [].forEach.call($('#hotTbl').querySelectorAll('.hotlink'),function(a){a.onclick=function(ev){ev.preventDefault();showDetail(a.dataset.t,true)}});
+  var top=L.slice(0,5);
+  $('#hotWhy').innerHTML='<div class="eyebrow">Ringkasan</div><ul>'+top.map(function(h){return '<li><b>'+h.t+'</b> '+pct(h.chg,1)+', volume '+fmt(h.rv,1)+'×, transaksi Rp'+fmt(h.vt,1)+' M: '+esc(h.flags.slice(0,2).join('; '))+'.</li>'}).join('')+'</ul>'+
+    '<p style="margin-top:8px"><b>Cara membaca:</b> skor dari 11 tanda (ARA/ARB, lonjakan volume, kapitalisasi & free float kecil, harga receh, reli bulanan/YTD, valuasi ekstrem, ekor atas panjang, perputaran tinggi, di luar indeks utama, status UMA/suspensi). Kuat ≥ 11, Indikasi 8–10, Waspada 5–7.</p>';
+  if(hotChart) hotChart.destroy();
+  if(!window.Chart) return;
+  var ink2=css('--ink2'),line=css('--line'),c10=L.slice(0,12);
+  hotChart=new Chart($('#hotChart'),{type:'bar',data:{labels:c10.map(function(h){return h.t}),datasets:[
+    {label:'Perubahan hari ini (%)',data:c10.map(function(h){return +h.chg.toFixed(1)}),backgroundColor:c10.map(function(h){return h.chg>=0?css('--up'):css('--down')}),borderRadius:4,xAxisID:'x'},
+    {label:'Volume × rata-rata',data:c10.map(function(h){return +Math.min(h.rv,100).toFixed(1)}),backgroundColor:css('--warn')||'#e0a100',borderRadius:4,xAxisID:'x2'}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'bottom',labels:{color:ink2,boxWidth:12}}},
+      scales:{x:{position:'top',ticks:{color:ink2,callback:function(v){return v+'%'}},grid:{color:line}},x2:{position:'bottom',ticks:{color:ink2,callback:function(v){return v+'×'}},grid:{display:false}},y:{ticks:{color:ink2,font:{family:'IBM Plex Mono'}},grid:{display:false}}}}});
+  $('#hotFoot').innerHTML='Batas ARA dihitung dari harga acuan: ≤ Rp200 = 35%, Rp200–5.000 = 25%, > Rp5.000 = 20%. Pola ini bukan bukti manipulasi, hanya tanda risiko dari data publik. Cek juga: <a href="https://www.idx.co.id/id/berita/pengumuman/" target="_blank" rel="noopener">Pengumuman BEI (UMA/suspensi) ↗</a> · <a href="https://news.google.com/search?q='+encodeURIComponent('UMA saham BEI when:7d')+'&hl=id&gl=ID&ceid=ID:id" target="_blank" rel="noopener">Berita UMA 7 hari ↗</a> · <a href="https://news.google.com/search?q='+encodeURIComponent('saham ARA hari ini when:1d')+'&hl=id&gl=ID&ceid=ID:id" target="_blank" rel="noopener">Berita saham ARA hari ini ↗</a>';
+}
 async function renderAll(){
   renderMarket(); renderLive(); renderCross(); renderTabs(); renderRec(); renderTable();
   renderIdxChart();

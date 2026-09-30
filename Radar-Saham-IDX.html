@@ -302,6 +302,16 @@ td.lim div{white-space:nowrap}
 .limedit{display:flex;gap:4px;margin-top:4px}
 .limedit input{width:88px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel);font-family:var(--mono);font-size:11.5px}
 .live-h{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:6px}
+.pager{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin:10px 0 4px;font-size:12.5px}.pg-info{color:var(--ink3)}.pg-btns{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.pager button{min-width:34px;padding:6px 10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;cursor:pointer;font:inherit;font-variant-numeric:tabular-nums}.pager button.cur{background:var(--ink);color:var(--panel);border-color:var(--ink);font-weight:600}.pager button:disabled{opacity:.4;cursor:default}.pager button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.pg-gap{padding:0 4px;color:var(--ink3)}.qk-form{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}.qk-form label{font-size:12px;color:var(--ink2);font-weight:600}.qk-form input{flex:1 1 180px;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:inherit;text-transform:uppercase}
+.qk-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:flex-start}.qk-t{font:600 22px var(--display)}.qk-t small{font:400 13px var(--body);color:var(--ink2)}.qk-px{font:500 20px var(--mono)}.qk-px span{font-size:13px}
+.qk-verdict{margin:12px 0;font-size:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.qk-verdict .rec-pill{font-size:13px;padding:5px 12px}
+.qk-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.qk-grid>div{background:var(--panel2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}.qk-grid span{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}.qk-grid b{font:600 18px var(--mono)}.qk-grid b small{font-size:12px;font-weight:500}.qk-grid>div>small{font-size:12px;color:var(--ink2)}
+.qk-grid>div:last-child b{font:600 15px var(--body)}
+.qk-why{margin:12px 0 8px;color:var(--ink2)}.qk-hz{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}.qk-h{border:1px solid var(--line);border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;font-size:12px}.qk-h span{color:var(--ink3)}.qk-h.b b{color:var(--up)}.qk-h.s b{color:var(--down)}.qk-h.w b{color:var(--warn)}.qk-h.best{border-color:var(--up);box-shadow:inset 0 0 0 1px var(--up)}
+.qk-links{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-top:12px;font-size:13px}
+.qk-tools{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-bottom:10px}.qk-tools h3{margin:0 auto 0 0}.qk-tools select{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font:inherit;font-size:13px;max-width:100%}.qk-tools label{font-size:13px;display:flex;gap:6px;align-items:center}
+.qktbl{width:100%;border-collapse:collapse;font-size:13px}.qktbl th{text-align:left;font-size:11px;font-weight:600;color:var(--ink3);padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}.qktbl th.n,.qktbl td.n{text-align:right}.qktbl td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}.qktbl td.n{font-family:var(--mono);white-space:nowrap}.qktbl tbody tr{cursor:pointer}.qktbl tbody tr:hover{background:var(--panel2)}.qktbl .sub{display:block;font-size:11px;color:var(--ink3)}.qktbl .badges{display:flex;gap:4px;margin-top:2px}
+@media (max-width:760px){.qk-grid{grid-template-columns:1fr 1fr}.qk-hz{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .hotseg{margin:0 0 12px}.odt{font-size:11px;line-height:1.35;margin-top:4px;white-space:nowrap;font-family:var(--mono)}.hotstats{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}.hotstats div{border:1px solid var(--line);border-radius:10px;padding:6px 12px;min-width:118px}.hotstats b{display:block;font:600 20px 'IBM Plex Mono',monospace}.hotstats span{font-size:11px;color:var(--ink3)}
 .hotwrap{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px;margin-bottom:12px}.hotchart{position:relative;height:300px}.hotwhy{font-size:12.5px;color:var(--ink2)}.hotwhy ul{margin:4px 0 0;padding-left:18px}.hotwhy li{margin:3px 0}
 @media(max-width:800px){.hotwrap{grid-template-columns:1fr}}
@@ -360,7 +370,7 @@ td.lim div{white-space:nowrap}
     </div>
   </div>
   <nav class="wrap nav" aria-label="Menu">
-    <a href="#market">Pasar</a><a href="#rekomendasi">Rekomendasi</a><a href="#detail">Analisis saham</a><a href="#portofolio"><b>Portofolio saya</b></a><a href="#screener">Screener</a><a href="#metode">Metodologi</a>
+    <a href="#ringkas"><b>Rekomendasi ringkas</b></a><a href="#market">Pasar</a><a href="#rekomendasi">Rekomendasi</a><a href="#detail">Analisis saham</a><a href="#portofolio"><b>Portofolio saya</b></a><a href="#screener">Screener</a><a href="#metode">Metodologi</a>
     <a class="ext-l" href="https://carisaham.com/index.php/" target="_blank" rel="noopener">CariSaham: analisa &amp; rekomendasi ↗</a>
   </nav>
 </header>
@@ -369,6 +379,25 @@ td.lim div{white-space:nowrap}
   <div class="banner" id="banner" hidden></div>
   <a class="alert-top" id="alertTop" href="#portofolio" hidden></a>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <section id="ringkas" aria-labelledby="qk-h">
+    <div class="sec-h"><h2 id="qk-h">Rekomendasi ringkas</h2><p>Satu jawaban per saham: cocok untuk transaksi berapa lama, beli di harga berapa, jual di harga berapa, dan disimpan sampai kapan.</p></div>
+    <div class="panel box qk-top">
+      <form class="qk-form" id="qkForm"><label for="qkInput">Kode saham</label><input id="qkInput" list="tickers" placeholder="mis. BBRI, TLKM, ANTM" autocomplete="off"><button class="btn primary" type="submit">Lihat rekomendasi</button></form>
+      <div id="qkCard" class="qk-card"></div>
+    </div>
+    <div class="panel box" style="margin-top:12px">
+      <div class="qk-tools">
+        <h3>Semua saham likuid</h3>
+        <select id="qkH" aria-label="Jenis transaksi"><option value="">Semua jenis transaksi</option><option value="sc">Scalping</option><option value="d3">3 Hari</option><option value="w1">1 Minggu</option><option value="w2">2 Minggu</option><option value="m3">3 Bulan</option><option value="long">1 Tahun</option></select>
+        <select id="qkS" aria-label="Syariah"><option value="">Halal &amp; non-halal</option><option value="halal">Hanya halal</option><option value="non">Hanya non-halal</option></select>
+        <label><input type="checkbox" id="qkOnly" checked> Hanya yang layak beli</label>
+      </div>
+      <div class="tblwrap"><table class="qktbl" id="qkTbl"></table></div>
+      <nav class="pager" id="qkPager" aria-label="Halaman rekomendasi ringkas"></nav>
+      <p class="halalnote">Harga beli = rentang antre beli. Harga jual = target ambil untung. Stop loss = jual rugi bila harga turun sampai level ini. Lama simpan dihitung dalam hari bursa (Senin–Jumat, belum memperhitungkan libur bursa). Scalping: jual di hari yang sama sebelum 15:49 WIB.</p>
+    </div>
+  </section>
 
   <section id="market" aria-labelledby="mkt-h">
     <div class="sec-h"><h2 id="mkt-h">Pergerakan pasar</h2><p id="mktSub"></p></div>
@@ -391,6 +420,7 @@ td.lim div{white-space:nowrap}
       <div class="seg hotseg" id="hotSeg" role="group" aria-label="Filter jenis usaha"><button type="button" data-h="all" aria-pressed="true">Semua</button><button type="button" data-h="halal" aria-pressed="false">Halal (syariah)</button><button type="button" data-h="non" aria-pressed="false">Non-halal</button></div>
       <div class="hotwrap"><div class="hotchart"><canvas id="hotChart"></canvas></div><div class="hotwhy" id="hotWhy"></div></div>
       <div class="tblwrap"><table class="hottbl" id="hotTbl"></table></div>
+      <nav class="pager" id="hotPager" aria-label="Halaman radar gorengan"></nav>
       <p class="halalnote" id="hotFoot"></p>
     </div>
     <div class="panel box" style="margin-top:12px">
@@ -466,6 +496,7 @@ td.lim div{white-space:nowrap}
     </div>
     <p class="mktcond" id="mktCond"></p>
     <div class="tablewrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+    <nav class="pager" id="scPager" aria-label="Halaman screener"></nav>
     <div class="legend">
       <span><i class="chip p">✓</i> lolos</span><span><i class="chip f">✗</i> gagal</span><span><i class="chip n">–</i> tidak relevan</span>
       <span>Urutan: <b>R</b> pendapatan tumbuh · <b>M</b> NPM &gt; industri · <b>L</b> laba inti naik · <b>D</b> DER&lt;1 · <b>K</b> kas cukup · <b>S</b> saldo laba · <b>O</b> CFO+ · <b>F</b> FCF+</span>
@@ -1351,6 +1382,7 @@ function renderIdxChart(){
     options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'bottom',labels:{color:ink2,boxWidth:12}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+pct(c.parsed.y,2)}}}},scales:{x:{ticks:{color:ink2},grid:{display:false}},y:{ticks:{color:ink2,callback:function(v){return v+'%'}},grid:{color:line}}}}});
 }
 async function showDetail(t,scroll){
+  try{ if(scroll&&BY[t]&&$('#qkCard')){ qkCur=t; renderQuickCard(t); } }catch(e){}
   t=(t||'').trim().toUpperCase(); if(!t) return; lastDetail=t;
   var box=$('#detailBox'), s=BY[t];
   if(!s && D.live){ box.innerHTML='<div class="notfound">Mencari '+esc(t)+' di TradingView…</div>'; try{ s=await fetchOne(t); if(s) BY[t]=s; }catch(e){} }
@@ -1393,11 +1425,70 @@ async function showDetail(t,scroll){
 }
 
 var COLS=[['t','Saham',0],['qr','Rekomendasi',0],['gp','Risiko gorengan',0],['xc','MA cross',0],['p','Harga',1],['chg','Hari ini',1],['fs','Kriteria',0],['roe','ROE',1],['per','PER',1],['pbv','PBV',1],['npm','NPM',1],['der','DER',1],['dy','Yield',1],['w','1 mgg',1],['m1','1 bln',1],['m3','3 bln',1],['rsi','RSI',1],['mc','Kapitalisasi',1],['csr','CariSaham',1]];
+var PG=10, scPage=1, hotPage=1;
+function pagerHtml(id,total,page){var n=Math.max(1,Math.ceil(total/PG)); if(total<=PG) return '<span class="pg-info">'+total+' baris</span>';
+  var from=(page-1)*PG+1, to=Math.min(total,page*PG), b=function(p,l,dis,cur){return '<button type="button" data-pg="'+p+'"'+(dis?' disabled':'')+(cur?' aria-current="page" class="cur"':'')+'>'+l+'</button>'};
+  var nums=[]; for(var i=1;i<=n;i++){ if(i===1||i===n||Math.abs(i-page)<=1) nums.push(i); else if(nums[nums.length-1]!=='…') nums.push('…'); }
+  return '<span class="pg-info">Baris '+from+'–'+to+' dari '+total+' · halaman '+page+'/'+n+'</span><span class="pg-btns">'+b(page-1,'‹ Sebelumnya',page<=1)+nums.map(function(x){return x==='…'?'<span class="pg-gap">…</span>':b(x,x,false,x===page)}).join('')+b(page+1,'Berikutnya ›',page>=n)+'</span>';}
+function bindPager(id,cb){[].forEach.call(document.querySelectorAll('#'+id+' button[data-pg]'),function(x){x.onclick=function(){cb(+x.dataset.pg)}})}
+var QH=[{k:'sc',lb:'Scalping',hold:'Hari yang sama',hd:0},{k:'d3',lb:'3 Hari',hold:'Maks. 3 hari bursa',hd:3},{k:'w1',lb:'1 Minggu',hold:'±5 hari bursa',hd:5},{k:'w2',lb:'2 Minggu',hold:'±10 hari bursa',hd:10},{k:'m3',lb:'3 Bulan',hold:'±60 hari bursa',hd:60},{k:'long',lb:'1 Tahun',hold:'≥ 1 tahun, evaluasi tiap laporan kuartal',hd:250}];
+var qkPage=1;
+function addTradingDays(n){var n0=n,d=new Date(Date.now()+7*3600e3);while(n>0){d.setUTCDate(d.getUTCDate()+1);var w=d.getUTCDay();if(w!==0&&w!==6)n--;}return d.toLocaleDateString('id-ID',{timeZone:'UTC',weekday:'short',day:'numeric',month:'short',year:n0>200?'numeric':undefined});}
+function holdUntil(h){ if(h.k==='sc'){var w=wibNow(),open=w.dow>0&&w.dow<6&&w.m>=540&&w.m<949;return open&&w.m<930?'Tutup posisi hari ini sebelum 15:49':'Sesi bursa berikutnya, jual sebelum 15:49';} return 'Sampai ±'+addTradingDays(h.hd); }
+function simpleRec(s){
+  var w=wibNow(), open=w.dow>0&&w.dow<6&&w.m>=540&&w.m<949, all=[];
+  QH.forEach(function(h){ var r;
+    if(h.k==='sc'){ var q=ENGINE.scalp(s,open&&w.m>=690&&w.m<930?'siang':'besok'); if(!q){r={k:h.k,v:'NA',pass:0,n:1};} else r={k:h.k,v:q.ok&&s.gor.lvl!=='Tinggi'?'BELI':q.hard?'TAHAN':'JUAL',pass:q.pass,n:q.n,buyLo:q.buyLo,buyHi:q.buyHi,tp:q.tp1,tp2:q.tp2,sl:q.sl,up:q.up1,dn:q.dn}; }
+    else { var v=ENGINE.verdict(s,h.k), p=v.plan; r={k:h.k,v:v.v,pass:v.pass,n:v.checks.length,buyLo:p.buyLo,buyHi:p.buyHi,tp:p.tp,sl:p.sl,up:p.upPct+(p.dy||0),dn:p.dnPct}; }
+    r.h=h; r.rr=r.dn>0?r.up/r.dn:0; all.push(r); });
+  var buys=all.filter(function(r){return r.v==='BELI'});
+  var hard=s.risk||s.gor.lvl==='Tinggi'||(s.q&&s.q.r==='HINDARI'&&!buys.length);
+  var best=null, status;
+  if(buys.length&&!s.risk){ best=buys.slice().sort(function(a,b){return (b.rr-a.rr)||(b.h.hd-a.h.hd)})[0]; status='BELI'; }
+  else if(hard){ status='HINDARI'; }
+  else { best=all.filter(function(r){return r.v!=='NA'}).sort(function(a,b){return (b.pass/b.n-a.pass/a.n)||(b.h.hd-a.h.hd)})[0]; status='TUNGGU'; }
+  return {status:status,best:best,all:all};
+}
+function qkWhy(s,R){
+  if(R.status==='HINDARI') return s.risk?s.risk:(s.gor.lvl==='Tinggi'?'Indikasi saham gorengan tinggi ('+s.gor.pts+' poin risiko).':(s.q&&s.q.why)||'Tren turun dan fundamental tidak mendukung.');
+  var b=R.best; if(!b) return '';
+  if(R.status==='TUNGGU'){ return 'Belum ada jenis transaksi yang lolos. Paling mendekati: '+b.h.lb+' ('+b.pass+'/'+b.n+' syarat). Pasang antrean hanya jika harga turun ke area beli.'; }
+  var n=R.all.filter(function(r){return r.v==='BELI'}).map(function(r){return r.h.lb});
+  return 'Lolos '+b.pass+'/'+b.n+' syarat. Potensi untung '+pct(b.up)+' vs risiko '+pct(-b.dn)+' (untung/risiko '+fmt(b.rr,1)+'×).'+(n.length>1?' Juga layak untuk: '+n.filter(function(x){return x!==b.h.lb}).join(', ')+'.':'');
+}
+function renderQuickCard(t){
+  var s=BY[t]; if(!s){ $('#qkCard').innerHTML='<p class="halalnote">Kode '+esc(t)+' tidak ada di data. Coba kode lain, atau cari lewat kotak pencarian di atas.</p>'; return; }
+  var R=simpleRec(s), b=R.best, c=R.status==='BELI'?'hold':R.status==='TUNGGU'?'warn':'cut';
+  var chip=function(r){var cl=r.v==='BELI'?'b':r.v==='JUAL'?'s':r.v==='NA'?'n':'w';return '<li class="qk-h '+cl+(b&&r===b&&R.status==='BELI'?' best':'')+'"><span>'+r.h.lb+'</span><b>'+(r.v==='BELI'?'Layak':r.v==='JUAL'?'Tidak':r.v==='NA'?'–':'Tunggu')+'</b></li>'};
+  $('#qkCard').innerHTML='<div class="qk-head"><div><div class="qk-t">'+s.t+' <small>'+esc(s.n)+'</small></div><div class="badges">'+badges(s)+'</div></div><div class="qk-px">Rp'+fmt(s.p)+' <span class="'+cls(s.chg)+'">'+pct(s.chg,2)+'</span></div></div>'+
+    '<div class="qk-verdict"><span class="rec-pill '+c+'">'+(R.status==='BELI'?'BELI':R.status==='TUNGGU'?'TUNGGU':'HINDARI')+'</span> '+(R.status==='BELI'?'Paling cocok untuk <b>'+b.h.lb+'</b>':R.status==='TUNGGU'?'Belum layak beli sekarang':'Jangan dibeli')+'</div>'+
+    (b&&R.status!=='HINDARI'?'<div class="qk-grid"><div><span>Harga beli</span><b>'+fmt(b.buyLo)+(b.buyHi!==b.buyLo?' – '+fmt(b.buyHi):'')+'</b></div><div><span>Harga jual (target)</span><b class="up">'+fmt(b.tp)+' <small>'+pct(b.up)+'</small></b></div><div><span>Stop loss</span><b class="down">'+fmt(b.sl)+' <small>'+pct(-b.dn)+'</small></b></div><div><span>Simpan berapa lama</span><b>'+b.h.hold+'</b><small>'+holdUntil(b.h)+'</small></div></div>':'')+
+    '<p class="qk-why">'+esc(qkWhy(s,R))+'</p><ul class="qk-hz">'+R.all.map(chip).join('')+'</ul>'+
+    '<div class="qk-links"><a href="#detail" data-t="'+s.t+'" id="qkMore">Analisis lengkap '+s.t+' ↓</a><a href="https://id.tradingview.com/chart/?symbol=IDX%3A'+s.t+'" target="_blank" rel="noopener">Grafik ↗</a><a href="'+gnews(s.t)+'" target="_blank" rel="noopener">Berita ↗</a><button class="addpf" type="button" onclick="window.__pfPrefill(\''+s.t+'\','+s.p+')">+ Tambah ke portofolio</button></div>';
+  var m=$('#qkMore'); if(m) m.onclick=function(e){e.preventDefault();showDetail(s.t,true)};
+}
+var qkCur=null;
+function renderQuick(){
+  var fh=$('#qkH').value, fs=$('#qkS').value, only=$('#qkOnly').checked;
+  var rows=D.universe.map(function(s){return {s:s,R:simpleRec(s)}}).filter(function(x){var s=x.s,R=x.R;
+    if(fs&&(fs==='halal'?s.syariah!==true:s.syariah===true)) return false;
+    if(only&&R.status!=='BELI') return false;
+    if(fh){ var r=R.all.filter(function(r){return r.k===fh})[0]; if(!r||r.v!=='BELI') return false; x.b=r; } else x.b=R.best;
+    return true; });
+  var ord={BELI:0,TUNGGU:1,HINDARI:2}; rows.sort(function(a,b){return (ord[a.R.status]-ord[b.R.status])||((b.b?b.b.rr:0)-(a.b?a.b.rr:0))});
+  var n=Math.max(1,Math.ceil(rows.length/PG)); if(qkPage>n) qkPage=n; var pg=rows.slice((qkPage-1)*PG,qkPage*PG);
+  $('#qkTbl').innerHTML='<thead><tr><th>Saham</th><th>Rekomendasi</th><th>Cocok untuk</th><th class="n">Harga</th><th class="n">Harga beli</th><th class="n">Harga jual</th><th class="n">Stop loss</th><th>Simpan berapa lama</th></tr></thead><tbody>'+
+    (pg.length?pg.map(function(x){var s=x.s,R=x.R,b=x.b,c=R.status==='BELI'?'hold':R.status==='TUNGGU'?'warn':'cut',show=b&&R.status!=='HINDARI';
+      return '<tr data-t="'+s.t+'"><td><b class="tkc">'+s.t+'</b><span class="sub">'+esc(s.n)+'</span><span class="badges">'+badges(s,true)+'</span></td><td><span class="rec-pill '+c+'">'+R.status+'</span></td><td>'+(show?(R.status==='BELI'?'<b>'+b.h.lb+'</b>':'<span class="sub">paling dekat: '+b.h.lb+'</span>'):'–')+'</td><td class="n">'+fmt(s.p)+'</td><td class="n">'+(show?fmt(b.buyLo)+(b.buyHi!==b.buyLo?'–'+fmt(b.buyHi):''):'–')+'</td><td class="n up">'+(show?fmt(b.tp)+' <small>'+pct(b.up)+'</small>':'–')+'</td><td class="n down">'+(show?fmt(b.sl):'–')+'</td><td>'+(show?b.h.hold+'<span class="sub">'+holdUntil(b.h)+'</span>':'–')+'</td></tr>'}).join(''):'<tr><td colspan="8">Tidak ada saham yang sesuai filter. Coba hilangkan centang "Hanya yang layak beli".</td></tr>')+'</tbody>';
+  $('#qkPager').innerHTML=pagerHtml('qkPager',rows.length,qkPage); bindPager('qkPager',function(p){qkPage=p;renderQuick();document.getElementById('qkTbl').scrollIntoView({block:'start'})});
+  if(!qkCur) qkCur=(rows[0]&&rows[0].s.t)||(D.picks.long[0]&&D.picks.long[0].t);
+  renderQuickCard(qkCur);
+}
 function renderTable(){
   var secs=Array.from(new Set(D.stocks.map(function(s){return s.sec}))).filter(Boolean).sort(), sel=$('#filterSec'), keep=sel.value;
   sel.innerHTML='<option value="">Semua sektor</option>'+secs.map(function(x){return '<option'+(x===keep?' selected':'')+'>'+esc(x)+'</option>'}).join('');
   $('#tbl thead').innerHTML='<tr>'+COLS.map(function(c){return '<th data-k="'+c[0]+'" class="'+(c[2]?'n':'')+(c[0]===sortK?' sorted'+(sortDir>0?' asc':''):'')+'">'+c[1]+'</th>'}).join('')+'</tr>';
-  [].forEach.call($('#tbl thead').querySelectorAll('th'),function(th){th.onclick=function(){var k=th.dataset.k;if(sortK===k)sortDir*=-1;else{sortK=k;sortDir=(k==='t'||k==='per'||k==='pbv'||k==='der')?1:-1}renderTable()}});
+  [].forEach.call($('#tbl thead').querySelectorAll('th'),function(th){th.onclick=function(){var k=th.dataset.k;if(sortK===k)sortDir*=-1;else{sortK=k;sortDir=(k==='t'||k==='per'||k==='pbv'||k==='der')?1:-1}scPage=1;renderTable()}});
   drawRows();
   $('#tickers').innerHTML=D.stocks.map(function(s){return '<option value="'+s.t+'">'+esc(s.n)+'</option>'}).join('');
 }
@@ -1411,10 +1502,15 @@ function drawRows(){
   var cnt={BELI:0,PANTAU:0,HINDARI:0};rows.forEach(function(s){cnt[s.q.r]++});
   $('#mktCond').innerHTML='<b>Kondisi pasar:</b> '+(D.mkt.weak?'<span class="down">melemah</span> (IHSG '+pct(D.mkt.w)+' sepekan, '+pct(D.mkt.m1)+' sebulan). Sinyal trading jangka pendek dinaikkan ke PANTAU; untuk BELI jangka menengah/panjang, beli bertahap.':'<span class="up">stabil/menguat</span> (IHSG '+pct(D.mkt.w)+' sepekan).')+' · Di tabel ini: <span class="up">'+cnt.BELI+' BELI</span>, '+cnt.PANTAU+' PANTAU, <span class="down">'+cnt.HINDARI+' HINDARI</span>.';
   $('#scSub').textContent=D.stocks.length+' saham (kapitalisasi ≥ Rp1 T) · klik baris untuk analisis · klik judul kolom untuk mengurutkan';
+  var nPg=Math.max(1,Math.ceil(rows.length/PG)); if(scPage>nPg) scPage=nPg; var allRows=rows; rows=rows.slice((scPage-1)*PG,scPage*PG);
   $('#tbl tbody').innerHTML=rows.map(function(s){return '<tr data-t="'+s.t+'"><td><span class="tkc">'+s.t+'</span>'+(s.risk?' <span class="tag risk" title="'+esc(s.risk)+'">!</span>':'')+'<span class="sub">'+esc(s.n)+'</span><span class="badges" style="margin-top:2px">'+badges(s,true)+'</span></td><td>'+qPill(s)+'</td><td>'+gorPill(s)+'</td><td>'+xPill(s.xmaj)+'<br><small class="halalnote">MA20×50: </small>'+xPill(s.xswg,true)+'<br>'+xChartLinks(s.t,true)+'</td><td class="n">'+fmt(s.p)+'</td><td class="n '+cls(s.chg)+'">'+pct(s.chg,2)+'</td><td><span class="chips">'+CK.map(function(c){return chip(s.c[c[0]])}).join('')+'</span> <span class="mono" style="font-size:11px;color:var(--ink3)">'+s.fp+'/'+s.fa+'</span></td><td class="n">'+roePill(s.roe)+'</td><td class="n">'+(s.per>0?fmt(s.per,1)+'×':'–')+vlab(s.per_v)+'</td><td class="n">'+(s.pbv>0?fmt(s.pbv,2)+'×':'–')+vlab(s.pbv_v)+'</td><td class="n">'+fmt(s.npm,1)+'%</td><td class="n '+(s.der!=null&&s.der>=1?'down':'')+'">'+(s.der!=null?fmt(s.der,2):'–')+'</td><td class="n">'+fmt(s.dy,1)+'%</td><td class="n '+cls(s.w)+'">'+pct(s.w)+'</td><td class="n '+cls(s.m1)+'">'+pct(s.m1)+'</td><td class="n '+cls(s.m3)+'">'+pct(s.m3)+'</td><td class="n">'+fmt(s.rsi,0)+'</td><td class="n">'+rp(s.mc)+'</td><td class="n">'+(CS[s.t]&&CS[s.t].r?'<a href="'+csUrl(s.t)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">★'+fmt(CS[s.t].r,1)+'</a>':'–')+'</td></tr>'}).join('');
+  $('#scPager').innerHTML=pagerHtml('scPager',allRows.length,scPage); bindPager('scPager',function(p){scPage=p;drawRows();document.getElementById('screener').scrollIntoView({block:'start'})});
 }
 $('#tbl').addEventListener('click',function(e){var tr=e.target.closest('tbody tr');if(tr)showDetail(tr.dataset.t,true)});
-['#filterTxt','#filterSec','#filterPass','#filterRoe','#filterLiq','#filterHalal','#filterLq45','#filterRek','#filterGor','#filterX'].forEach(function(id){$(id).addEventListener('input',drawRows)});
+['#filterTxt','#filterSec','#filterPass','#filterRoe','#filterLiq','#filterHalal','#filterLq45','#filterRek','#filterGor','#filterX'].forEach(function(id){$(id).addEventListener('input',function(){scPage=1;drawRows()})});
+['#qkH','#qkS','#qkOnly'].forEach(function(id){$(id).addEventListener('input',function(){qkPage=1;renderQuick()})});
+$('#qkForm').addEventListener('submit',function(e){e.preventDefault();var v=$('#qkInput').value.trim().toUpperCase();if(!v)return;qkCur=v;renderQuickCard(v);});
+$('#qkTbl').addEventListener('click',function(e){var tr=e.target.closest('tbody tr[data-t]');if(!tr)return;qkCur=tr.dataset.t;renderQuickCard(qkCur);document.getElementById('qkCard').scrollIntoView({block:'nearest'})});
 
 /* ---------- Portofolio ---------- */
 var PF_KEY='rsi_portfolio', pfChart=null;
@@ -1643,30 +1739,32 @@ function hotSyr(h){ if(h.syr!=null) return h.syr; if(BY[h.t]&&BY[h.t].syariah!=n
 function hotHalalTag(h){var s=hotSyr(h); return s===true?'<span class="tag syr" title="Masuk Indeks Saham Syariah Indonesia (ISSI) / Daftar Efek Syariah OJK">Halal · Syariah</span>':s===false?'<span class="tag non" title="Tidak masuk ISSI / Daftar Efek Syariah: usaha atau rasio keuangannya belum memenuhi kriteria syariah OJK">Non-halal</span>':'<span class="tag" title="Status syariah tidak tersedia">–</span>'}
 function renderHot(H){
   HOT_LAST=H;
-  [].forEach.call(document.querySelectorAll('#hotSeg button'),function(b){b.onclick=function(){hotF=b.dataset.h;[].forEach.call(document.querySelectorAll('#hotSeg button'),function(x){x.setAttribute('aria-pressed',String(x===b))});try{renderHot(HOT_LAST)}catch(e){}}});
+  [].forEach.call(document.querySelectorAll('#hotSeg button'),function(b){b.onclick=function(){hotF=b.dataset.h;hotPage=1;[].forEach.call(document.querySelectorAll('#hotSeg button'),function(x){x.setAttribute('aria-pressed',String(x===b))});try{renderHot(HOT_LAST)}catch(e){}}});
 
-  if(!H){ $('#hotNote').textContent='Butuh koneksi internet: tekan Refresh saat online untuk memindai seluruh saham BEI.'; $('#hotStats').innerHTML=''; $('#hotTbl').innerHTML=''; $('#hotWhy').innerHTML=''; $('#hotFoot').innerHTML=''; return; }
+  if(!H){ $('#hotPager').innerHTML=''; $('#hotNote').textContent='Butuh koneksi internet: tekan Refresh saat online untuk memindai seluruh saham BEI.'; $('#hotStats').innerHTML=''; $('#hotTbl').innerHTML=''; $('#hotWhy').innerHTML=''; $('#hotFoot').innerHTML=''; return; }
   var all=H.rows.map(ENGINE.hot).filter(Boolean), seen={}; all=all.filter(function(h){if(seen[h.t])return false;seen[h.t]=1;return true});
-  var L0=ENGINE.hotList(H.rows,60); if(!H.web) hotStale(L0); else if(WEBDATA&&WEBDATA.stale) L0.forEach(function(h){var d=WEBDATA.stale[h.t]; if(d){h.stale=d; h.plan={v:'SUSPENSI?',why:'Data tidak berubah sejak '+d+': kemungkinan disuspensi BEI atau tidak ada transaksi. Tidak bisa diperdagangkan sampai dibuka lagi.',ara:h.plan&&h.plan.ara,arb:h.plan&&h.plan.arb}}}); var  L=L0.filter(function(h){var s=hotSyr(h);return hotF==='all'||(hotF==='halal'?s===true:s!==true)}).slice(0,20), si=wibNow(), open=si.dow>0&&si.dow<6&&si.m>=540&&si.m<960;
+  var L0=ENGINE.hotList(H.rows,60); if(!H.web) hotStale(L0); else if(WEBDATA&&WEBDATA.stale) L0.forEach(function(h){var d=WEBDATA.stale[h.t]; if(d){h.stale=d; h.plan={v:'SUSPENSI?',why:'Data tidak berubah sejak '+d+': kemungkinan disuspensi BEI atau tidak ada transaksi. Tidak bisa diperdagangkan sampai dibuka lagi.',ara:h.plan&&h.plan.ara,arb:h.plan&&h.plan.arb}}}); var  L=L0.filter(function(h){var s=hotSyr(h);return hotF==='all'||(hotF==='halal'?s===true:s!==true)})  , si=wibNow(), open=si.dow>0&&si.dow<6&&si.m>=540&&si.m<960;
+  var hotN=Math.max(1,Math.ceil(L.length/PG)); if(hotPage>hotN) hotPage=hotN; var LA=L; L=L.slice((hotPage-1)*PG,hotPage*PG);
   var cnt=function(f){return all.filter(f).length};
-  var nAra=cnt(function(h){return h.st==='ARA'||h.st==='ARA terkunci'}), nLock=cnt(function(h){return h.st==='ARA terkunci'}), nDump=cnt(function(h){return h.st==='Dibuang'||h.st==='ARB terkunci'}), nArbL=cnt(function(h){return h.st==='ARB terkunci'}), nVol=cnt(function(h){return h.rv>=5}), nKuat=L.filter(function(h){return h.lvl==='Kuat'}).length;
-  var valHot=L.reduce(function(s,h){return s+h.vt},0);
+  var nAra=cnt(function(h){return h.st==='ARA'||h.st==='ARA terkunci'}), nLock=cnt(function(h){return h.st==='ARA terkunci'}), nDump=cnt(function(h){return h.st==='Dibuang'||h.st==='ARB terkunci'}), nArbL=cnt(function(h){return h.st==='ARB terkunci'}), nVol=cnt(function(h){return h.rv>=5}), nKuat=LA.filter(function(h){return h.lvl==='Kuat'}).length;
+  var valHot=LA.reduce(function(s,h){return s+h.vt},0);
   $('#hotNote').textContent=(H.live?'LIVE ':H.web?'Versi web, data ':'Data tersimpan ')+H.at.toLocaleString('id-ID',{weekday:'short',hour:'2-digit',minute:'2-digit'})+' WIB · tertunda ±10 menit · dipindai '+all.length+' saham teraktif seluruh BEI'+(open?'':' · pasar tutup, data sesi terakhir');
   var st=function(v,l,s){return '<div><b>'+v+'</b><span>'+l+(s?'<br>'+s:'')+'</span></div>'};
   var T20=L0.slice(0,20), nH=T20.filter(function(h){return hotSyr(h)===true}).length;
-  $('#hotStats').innerHTML=st(nH+' / '+(T20.length-nH),'Halal / non-halal','dari '+T20.length+' teratas')+st(nKuat,'Indikasi kuat digoreng','skor ≥ 11')+st(L.length,'Masuk radar','skor ≥ 5')+st(nAra,'Sentuh ARA',nLock+' terkunci tanpa lawan')+st(nDump,'Anjlok ≤ −14% (ARB)',nArbL+' terkunci tanpa pembeli')+st(nVol,'Volume ≥ 5× rata-rata','')+st('Rp'+fmt(valHot,1)+' M','Transaksi saham di radar','');
+  $('#hotStats').innerHTML=st(nH+' / '+(T20.length-nH),'Halal / non-halal','dari '+T20.length+' teratas')+st(nKuat,'Indikasi kuat digoreng','skor ≥ 11')+st(LA.length,'Masuk radar','skor ≥ 5')+st(nAra,'Sentuh ARA',nLock+' terkunci tanpa lawan')+st(nDump,'Anjlok ≤ −14% (ARB)',nArbL+' terkunci tanpa pembeli')+st(nVol,'Volume ≥ 5× rata-rata','')+st('Rp'+fmt(valHot,1)+' M','Transaksi saham di radar','');
   if(!L.length){ $('#hotTbl').innerHTML='<tr><td>Tidak ada saham dengan pola gorengan yang menonjol pada data ini.</td></tr>'; $('#hotWhy').innerHTML=''; if(hotChart){hotChart.destroy();hotChart=null} return; }
   var stc=function(s){return !s?'':'<span class="hst '+(s.indexOf('ARA')===0||s==='Naik tajam'||s==='Naik'?'ara':s==='Dibuang'||s==='ARB terkunci'||s==='Turun tajam'?'dump':'oth')+'">'+s+'</span>'};
   $('#hotTbl').innerHTML='<thead><tr><th>Saham</th><th>Syariah</th><th>Jual-beli hari ini</th><th>Status</th><th>Harga</th><th>Hari ini</th><th>Open · High · Low</th><th>Volume ×</th><th>Transaksi</th><th>Kapitalisasi</th><th>Free float</th><th>1 bln</th><th>YTD</th><th>PBV · PER</th><th>Skor</th></tr></thead><tbody>'+
     L.map(function(h){var inU=!!BY[h.t];
       return '<tr><td><b>'+(inU?'<a href="#analisis" data-t="'+h.t+'" class="hotlink">'+h.t+'</a>':h.t)+'</b><br><small>'+esc(String(h.n||'').slice(0,26))+'</small></td><td>'+hotHalalTag(h)+'</td><td>'+odtCell(h)+'</td><td>'+stc(h.st)+'</td><td class="n">'+fmt(h.p)+'</td><td class="n '+cls(h.chg)+'">'+pct(h.chg,2)+'</td><td class="n">'+fmt(h.O)+' · '+fmt(h.H)+' · '+fmt(h.L)+'</td><td class="n">'+fmt(h.rv,1)+'×</td><td class="n">Rp'+fmt(h.vt,1)+' M</td><td class="n">'+(h.mc>=1000?'Rp'+fmt(h.mc/1000,2)+' T':'Rp'+fmt(h.mc,0)+' M')+'</td><td class="n">'+(h.ff!=null?fmt(h.ff,0)+'%':'–')+'</td><td class="n '+cls(h.m1)+'">'+pct(h.m1,0)+'</td><td class="n '+cls(h.ytd)+'">'+pct(h.ytd,0)+'</td><td class="n">'+fmt(h.pbv,2)+'× · '+(h.per!=null?fmt(h.per,1)+'×':'rugi')+'</td><td class="n"><span class="hlv '+h.lvl+'">'+h.lvl+'</span><br>'+h.pts+'</td></tr><tr class="flr"><td></td><td colspan="14" class="fl"><div class="flw">'+(h.plan?'<b>Saran:</b> '+esc(h.plan.why)+' Batas hari ini: ARA '+fmt(h.plan.ara)+' · ARB '+fmt(h.plan.arb)+'.<br>':'')+'<b>Data pendukung:</b> '+h.flags.map(function(f){return '<span>• '+esc(f)+'</span>'}).join('')+'<span class="hcek">Cek: <a href="https://id.tradingview.com/chart/?symbol=IDX%3A'+h.t+'&interval=5" target="_blank" rel="noopener">grafik 5 menit ↗</a> · <a href="'+gnews(h.t)+'" target="_blank" rel="noopener">berita ↗</a> · <a href="https://carisaham.com/emiten/profile/'+h.t+'" target="_blank" rel="noopener">CariSaham ↗</a></span></div></td></tr>'}).join('')+'</tbody>';
+  $('#hotPager').innerHTML=pagerHtml('hotPager',LA.length,hotPage); bindPager('hotPager',function(p){hotPage=p;try{renderHot(HOT_LAST)}catch(e){} document.getElementById('hotTbl').scrollIntoView({block:'start'})});
   [].forEach.call($('#hotTbl').querySelectorAll('.hotlink'),function(a){a.onclick=function(ev){ev.preventDefault();showDetail(a.dataset.t,true)}});
-  var top=L.slice(0,5);
+  var top=LA.slice(0,5);
   $('#hotWhy').innerHTML='<div class="eyebrow">Ringkasan</div><ul>'+top.map(function(h){return '<li><b>'+h.t+'</b> '+pct(h.chg,1)+', volume '+fmt(h.rv,1)+'×, transaksi Rp'+fmt(h.vt,1)+' M: '+esc(h.flags.slice(0,2).join('; '))+'.</li>'}).join('')+'</ul>'+
     '<p style="margin-top:8px"><b>Cara membaca:</b> skor dari 11 tanda (ARA/ARB, lonjakan volume, kapitalisasi & free float kecil, harga receh, reli bulanan/YTD, valuasi ekstrem, ekor atas panjang, perputaran tinggi, di luar indeks utama, status UMA/suspensi). Kuat ≥ 11, Indikasi 8–10, Waspada 5–7.</p>';
   if(hotChart) hotChart.destroy();
   if(!window.Chart) return;
-  var ink2=css('--ink2'),line=css('--line'),c10=L.slice(0,12);
+  var ink2=css('--ink2'),line=css('--line'),c10=LA.slice(0,12);
   hotChart=new Chart($('#hotChart'),{type:'bar',data:{labels:c10.map(function(h){return h.t}),datasets:[
     {label:'Perubahan hari ini (%)',data:c10.map(function(h){return +h.chg.toFixed(1)}),backgroundColor:c10.map(function(h){return h.chg>=0?css('--up'):css('--down')}),borderRadius:4,xAxisID:'x'},
     {label:'Volume × rata-rata',data:c10.map(function(h){return +Math.min(h.rv,100).toFixed(1)}),backgroundColor:css('--warn')||'#e0a100',borderRadius:4,xAxisID:'x2'}]},
@@ -1675,7 +1773,7 @@ function renderHot(H){
   $('#hotFoot').innerHTML='Batas ARA dihitung dari harga acuan: ≤ Rp200 = 35%, Rp200–5.000 = 25%, > Rp5.000 = 20%. Pola ini bukan bukti manipulasi, hanya tanda risiko dari data publik. Cek juga: <a href="https://www.idx.co.id/id/berita/pengumuman/" target="_blank" rel="noopener">Pengumuman BEI (UMA/suspensi) ↗</a> · <a href="https://news.google.com/search?q='+encodeURIComponent('UMA saham BEI when:7d')+'&hl=id&gl=ID&ceid=ID:id" target="_blank" rel="noopener">Berita UMA 7 hari ↗</a> · <a href="https://news.google.com/search?q='+encodeURIComponent('saham ARA hari ini when:1d')+'&hl=id&gl=ID&ceid=ID:id" target="_blank" rel="noopener">Berita saham ARA hari ini ↗</a>';
 }
 async function renderAll(){
-  renderMarket(); renderLive(); renderCross(); renderTabs(); renderRec(); renderTable();
+  renderQuick(); renderMarket(); renderLive(); renderCross(); renderTabs(); renderRec(); renderTable();
   renderIdxChart();
   showDetail(lastDetail||D.picks.long[0].t,false);
   renderMarketNews();

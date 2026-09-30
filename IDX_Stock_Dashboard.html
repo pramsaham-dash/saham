@@ -106,6 +106,7 @@ tr:hover td{background:var(--panel2)}
 .form input{width:130px}
 .act{font-weight:700;font-size:12px}
 .disc{font-size:11.5px;color:var(--muted);margin:22px 0 6px;line-height:1.5}
+.pager{display:flex;gap:4px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-top:8px}.pager .btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .tvbox{height:420px;margin-top:10px;border-radius:8px;overflow:hidden;background:var(--panel2)}
 @media (max-width:640px){main{padding:12px}.hrow{padding:8px 12px}.kpi .val{font-size:20px}}
 </style>
@@ -411,7 +412,7 @@ function analyze(snap){
   D.recs=makeRecs(D);D.daytrade=makeDaytrade(D);D.scalping=makeScalping(D);
   D.crosses=[];all.filter(r=>r.avgVal>=CFG.minValUniverse*2).forEach(r=>{[['c50','MA50/MA200'],['c20','MA20/MA50']].forEach(([k,p])=>{const c=r.ta[k];if(c)D.crosses.push({r,pair:p,...c})})});
   D.crosses.sort((a,b)=>a.days-b.days||(b.r.avgVal-a.r.avgVal));
-  D.gorengan=all.filter(r=>r.gorengan&&(r.value||0)>=2e8).sort((a,b)=>(b.ta.r20||0)-(a.ta.r20||0)).slice(0,40);
+  D.gorengan=all.filter(r=>r.gorengan&&(r.value||0)>=2e8).sort((a,b)=>(b.ta.r20||0)-(a.ta.r20||0));
   return D;
 }
 
@@ -421,7 +422,7 @@ function plan(r,h){
   else if(h==='1w'){tgt=p*(1+clip(2*ap,0.03,0.10));sl=p*(1-clip(1.2*ap,0.02,0.06))}
   else if(h==='2w'){tgt=p*(1+clip(3*ap,0.04,0.15));sl=p*(1-clip(1.5*ap,0.03,0.08))}
   else if(h==='3m'){tgt=p*(1+clip(4*ap,0.08,0.25));sl=Math.min(p*0.95,Math.max((ta.ma50||p*0.9)*0.97,p*0.88))}
-  else{const fv=r.fair_value;tgt=(fv&&fv>p*1.05)?Math.min(fv,p*2):p*1.25;sl=Math.min(Math.max(p*0.8,(ta.ma200||p*0.85)*0.93),p*0.92)}
+  else{const fv=r.fair_value;tgt=(fv&&fv>p*1.05)?Math.min(fv,p*1.5):p*1.25;sl=Math.min(Math.max(p*0.8,(ta.ma200||p*0.85)*0.93),p*0.92)}
   const lo=rtick(Math.max(p-0.5*atr,(h==='3d'||h==='1w')?Math.min(ta.s1,p):p-atr),'down');
   const T=rtick(tgt,'down');return {entry:rtick(p),entry_lo:Math.min(lo,rtick(p)),target:T,stop:rtick(sl,'down'),upside:T/p-1};
 }
@@ -471,7 +472,7 @@ function makeDaytrade(D){
     const entry=rtick(Math.max(Math.min(ta.s1,p),p-0.3*ta.atr),'down'),tgt=rtick(entry*1.03,'up'),sl=rtick(entry-Math.max(0.5*ta.atr,entry*0.015),'down');
     const score=ap*600+vd*300+(bull?15:0)+Math.min(10,Math.log10(r.avgVal)-9);
     res.push({r,entry,target:tgt,stop:sl,rr:entry>sl?(tgt-entry)/(entry-sl):null,atr_pct:ap,volD:vd,bull,score})}
-  res.sort((a,b)=>b.score-a.score);return res.slice(0,12);
+  res.sort((a,b)=>b.score-a.score);return res.slice(0,30);
 }
 function makeScalping(D){
   const ph=D.phase,w=wib();const out={phase:ph.lab,time:w.str,morning:[],afternoon:[]};
@@ -491,7 +492,7 @@ function makeScalping(D){
         sell_lo:rtick(mid+0.4*rr,'up'),sell_hi:rtick(Math.max(mid+0.9*rr,Math.min(hi,mid+1.2*rr)),'up'),stop:rtick(Math.max(lo,mid-0.5*rr)-0.35*rr,'down'),
         score:s2r*100+(trend==='Naik'?2:0)+(m5==='Naik'?1.5:0)+Math.log10(r.avgVal)/2})}
   }
-  out.morning.sort((a,b)=>b.score-a.score);out.afternoon.sort((a,b)=>b.score-a.score);out.morning=out.morning.slice(0,10);out.afternoon=out.afternoon.slice(0,10);return out;
+  out.morning.sort((a,b)=>b.score-a.score);out.afternoon.sort((a,b)=>b.score-a.score);out.morning=out.morning.slice(0,30);out.afternoon=out.afternoon.slice(0,30);return out;
 }
 // jejak harga dari data performa (titik nyata: 1T, 6B, 3B, 1B, 1M lalu, kemarin, kini)
 function pricePath(r,h){const o=r.raw,c=r.last;const P=(k)=>num(o[k])!=null?c/(1+o[k]/100):null;
@@ -654,7 +655,7 @@ function renderScr(){
   <div class="card" style="margin-top:14px"><h3>Screener Fundamental <small>${base.length} saham likuid (nilai transaksi rata² ≥ ${big(CFG.minValUniverse)}) · ✓ lolos ✗ tidak · – data tidak tersedia</small></h3>
   <div class="pill"><input id="sf-q" placeholder="Filter kode/nama" style="width:160px"><select id="sf-sec"><option value="">Semua sektor</option>${secs.map(s=>`<option>${esc(s)}</option>`).join('')}</select>
   <label class="status"><input type="checkbox" id="sf-pass"> Lolos semua</label><label class="status"><input type="checkbox" id="sf-roe"> ROE ≥15%</label><label class="status"><input type="checkbox" id="sf-syr"> Halal saja</label><label class="status"><input type="checkbox" id="sf-cheap"> PER murah</label><label class="status"><input type="checkbox" id="sf-allst"> Tampilkan semua saham (${D.all.length})</label></div>
-  <div class="tw" style="max-height:640px;overflow-y:auto"><table id="scr-t"></table></div>
+  <div class="tw"><table id="scr-t"></table></div>
   <div class="note">NPM = rata-rata 3 tahun fiskal (✓ bila stabil & tiap tahun di atas median industri/sektor). Laba tren ✗ bila menurun atau ada indikasi laba non-operasional/one-off (mis. penjualan aset). DER = total utang ÷ ekuitas. Kas = kas & investasi jangka pendek ÷ beban operasi bulanan (≥3 bulan). *Saldo laba: TradingView tidak menyediakan pos saldo laba, sehingga dipakai proksi — laba bersih positif tiap tahun (5 thn) & rasio pembayaran dividen <100% (laba ditahan bertambah). PER/PBV dibanding median industri (Murah <0,8x, Mahal >1,25x). Bank: DER, kas & FCF tidak dinilai (struktur dana pihak ketiga).</div></div>`;
   ['sf-q','sf-sec','sf-pass','sf-roe','sf-syr','sf-cheap','sf-allst'].forEach(id=>$('#'+id).addEventListener('input',drawScr));drawScr();
 }
@@ -664,7 +665,6 @@ function drawScr(){
     &&(!$('#sf-pass').checked||(r.avail>=7&&r.passed===r.avail))&&(!$('#sf-roe').checked||(r.fm.roe||0)>=0.15)
     &&(!$('#sf-syr').checked||r.syariah==='Syariah')&&(!$('#sf-cheap').checked||r.per_label==='Murah'));
   const f=SVAL[scrSort.k],d=scrSort.d;rows.sort((a,b)=>{let va=f(a),vb=f(b);if(va==null)return 1;if(vb==null)return -1;return (va>vb?1:va<vb?-1:0)*d});
-  rows=rows.slice(0,400);
   $('#scr-t').innerHTML=`<tr>${SCOLS.map(([k,l,a])=>`<th class="s ${a||''}" data-k="${k}">${l}${scrSort.k===k?(scrSort.d>0?' ▲':' ▼'):''}</th>`).join('')}</tr>`+rows.map(r=>{const c=r.checks,fm=r.fm;return `<tr>
   <td class="l">${tk(r.ticker)}${r.gorengan?' <span class="b r" title="Indikasi gorengan">🔥</span>':''}</td><td class="l mut">${esc(r.sector)}</td><td>${px(r.last)}</td>
   <td>${ck(c.rev_growth)} ${fm.rev_up_years??'–'}</td><td>${pcs(fm.rev_cagr)}</td>
@@ -673,6 +673,7 @@ function drawScr(){
   <td>${ck(c.der)} ${fm.der==null?'':nf(fm.der,2)}</td><td>${ck(c.cash)} ${fm.cash_months==null?'':nf(fm.cash_months,1)}</td>
   <td>${ck(c.re)} ${fm.ni_years?fm.ni_pos_years+'/'+fm.ni_years:''}</td><td>${ck(c.cfo)} ${big(fm.cfo)}</td><td>${ck(c.fcf)} ${big(fm.fcf)}</td>
   <td>${roeb(fm.roe)}</td><td>${valb(r.per,r.per_label)}</td><td>${valb(r.pbv,r.pbv_label)}</td><td>${fsb(r.fund_score)} <span class="mut">${r.passed}/${r.avail}</span></td><td>${syb(r.syariah)}</td></tr>`}).join('');
+  paginate($('#scr-t'),true);
   $$('#scr-t th.s').forEach(th=>th.onclick=()=>{const k=th.dataset.k;scrSort={k,d:scrSort.k===k?-scrSort.d:-1};drawScr()});
 }
 
@@ -697,7 +698,7 @@ function renderTrd(){
 // ---------- CROSS ----------
 function renderCross(){
   const c=D.crosses;const g=c.filter(x=>x.type==='golden'),d=c.filter(x=>x.type==='death');
-  const t=(l,cls)=>`<div class="tw" style="max-height:560px;overflow-y:auto"><table><tr><th class="l">Saham</th><th class="l">Pasangan MA</th><th>Terjadi</th><th>Harga</th><th>%</th><th>RSI</th><th>Skor Fund.</th><th></th></tr>${l.slice(0,60).map(x=>`<tr><td class="l">${tk(x.r.ticker)}</td><td class="l"><span class="b ${cls}">${x.pair}</span></td><td>${x.days===0?'<b>hari ini</b>':(x.est?'≈':'')+x.days+' hari lalu'}</td><td>${px(x.r.last)}</td><td>${pcs(x.r.chg)}</td><td>${nf(x.r.ta.rsi)}</td><td>${fsb(x.r.fund_score)}</td><td>${syb(x.r.syariah)}</td></tr>`).join('')||'<tr><td colspan="8" class="l mut">Tidak ada</td></tr>'}</table></div>`;
+  const t=(l,cls)=>`<div class="tw"><table><tr><th class="l">Saham</th><th class="l">Pasangan MA</th><th>Terjadi</th><th>Harga</th><th>%</th><th>RSI</th><th>Skor Fund.</th><th></th></tr>${l.map(x=>`<tr><td class="l">${tk(x.r.ticker)}</td><td class="l"><span class="b ${cls}">${x.pair}</span></td><td>${x.days===0?'<b>hari ini</b>':(x.est?'≈':'')+x.days+' hari lalu'}</td><td>${px(x.r.last)}</td><td>${pcs(x.r.chg)}</td><td>${nf(x.r.ta.rsi)}</td><td>${fsb(x.r.fund_score)}</td><td>${syb(x.r.syariah)}</td></tr>`).join('')||'<tr><td colspan="8" class="l mut">Tidak ada</td></tr>'}</table></div>`;
   $('#t-cross').innerHTML=`<div class="grid g2"><div class="card"><h3>🟢 Golden Cross <small>MA pendek memotong MA panjang dari bawah ke atas → potensi tren naik</small></h3>${t(g,'g')}</div>
   <div class="card"><h3>🔴 Death Cross <small>MA pendek memotong MA panjang dari atas ke bawah → potensi tren turun</small></h3>${t(d,'r')}</div></div>
   <div class="note">"Hari ini" & "1 hari lalu" = persilangan terkonfirmasi dari nilai MA 3 hari terakhir. Tanda "≈" = estimasi umur persilangan dari selisih & kemiringan MA (MA50/200 ≤30 hari, MA20/50 ≤15 hari). Golden Cross MA50/200 lebih kuat sebagai sinyal tren menengah-panjang.</div>`;
@@ -796,12 +797,22 @@ function sortTable(tb,col,dir){const rows=[...tb.rows];const hi=rows.findIndex(r
     if(typeof va==='number'&&typeof vb==='number')return (va-vb)*dir;return String(va).localeCompare(String(vb),'id',{numeric:true})*dir});
   body.forEach(r=>parent.appendChild(r));
   [...rows[hi].cells].forEach((th,i)=>{th.classList.remove('asc','desc');if(i===col)th.classList.add(dir>0?'asc':'desc')})}
-function enableSort(root=document){root.querySelectorAll('table').forEach(tb=>{if(tb.id==='scr-t')return;const hr=[...tb.rows].find(r=>r.querySelector('th'));if(!hr)return;
+const PAGE=10;
+function paginate(tb,reset){if(!tb)return;const rows=[...tb.rows].filter(r=>r.cells.length>1&&!r.querySelector('th'));const n=rows.length,pages=Math.max(1,Math.ceil(n/PAGE));
+  let pg=reset?1:(+tb.dataset.page||1);pg=clip(pg,1,pages);tb.dataset.page=pg;rows.forEach((r,i)=>r.style.display=(i>=(pg-1)*PAGE&&i<pg*PAGE)?'':'none');
+  const host=tb.closest('.tw')||tb;let pager=host.nextElementSibling&&host.nextElementSibling.classList.contains('pager')?host.nextElementSibling:null;
+  if(n<=PAGE){if(pager)pager.remove();return}
+  if(!pager){pager=document.createElement('div');pager.className='pager';host.after(pager)}
+  const nums=[];for(let i=1;i<=pages;i++){if(i===1||i===pages||Math.abs(i-pg)<=2)nums.push(i);else if(nums[nums.length-1]!=='…')nums.push('…')}
+  pager.innerHTML=`<span class="status" style="margin-right:6px">${(pg-1)*PAGE+1}–${Math.min(pg*PAGE,n)} dari ${n}</span><button class="btn sm" data-pg="${pg-1}" ${pg<=1?'disabled':''}>‹</button>`+
+    nums.map(v=>v==='…'?'<span class="status">…</span>':`<button class="btn sm ${v===pg?'on':''}" data-pg="${v}">${v}</button>`).join('')+`<button class="btn sm" data-pg="${pg+1}" ${pg>=pages?'disabled':''}>›</button>`;
+  pager.querySelectorAll('[data-pg]').forEach(b=>b.onclick=()=>{tb.dataset.page=b.dataset.pg;paginate(tb)})}
+function enableSort(root=document){root.querySelectorAll('table').forEach(tb=>{if(tb.id==='scr-t'){paginate(tb,false);return}const hr=[...tb.rows].find(r=>r.querySelector('th'));if(!hr)return;
   [...hr.cells].forEach(th=>{if(!th.classList.contains('gs')){th.classList.add('gs');th.title='Klik untuk mengurutkan'}});
-  const k=tableKey(tb),st=SORTS[k];if(st&&st.col<hr.cells.length)sortTable(tb,st.col,st.dir)})}
+  const k=tableKey(tb),st=SORTS[k];if(st&&st.col<hr.cells.length)sortTable(tb,st.col,st.dir);paginate(tb,true)})}
 document.addEventListener('click',e=>{const th=e.target.closest('th.gs');if(!th)return;const tb=th.closest('table');const col=th.cellIndex;const k=tableKey(tb);
   const cur=SORTS[k];const dir=cur&&cur.col===col?-cur.dir:(typeof cellVal([...tb.rows].find(r=>r.cells.length>1&&!r.querySelector('th'))?.cells[col])==='number'?-1:1);
-  SORTS[k]={col,dir};LS.set('idx_sorts',SORTS);sortTable(tb,col,dir)});
+  SORTS[k]={col,dir};LS.set('idx_sorts',SORTS);sortTable(tb,col,dir);paginate(tb,true)});
 
 // ---------- CEK CEPAT (menu utama simpel) ----------
 const HZ=[['scalp','Scalping','Intraday (menit–jam), tutup posisi hari ini sebelum 15:50',0],['3d','3 Hari','2–3 hari bursa',3],['1w','1 Minggu','±5 hari bursa',5],['2w','2 Minggu','8–10 hari bursa',10],['3m','3 Bulan','±60 hari bursa, evaluasi tiap minggu',63],['lt','1 Tahun +','≥12 bulan, evaluasi tiap rilis laporan keuangan',250]];
@@ -899,13 +910,13 @@ function renderCek(){
   const picks=[...new Set(['3d','1w','2w','3m','lt'].flatMap(h=>(D.recs[h]||[]).slice(0,2).map(x=>x.r.ticker)))].slice(0,10);
   if(!el.dataset.init){el.dataset.init=1;el.innerHTML=`<div class="card"><h3>⚡ Cek Cepat Saham <small>ketik 1 atau beberapa kode (pisahkan koma) lalu Enter — rekomendasi jangka waktu, harga beli, jual, stop loss & lama simpan</small></h3>
     <form id="cekf" class="pill" style="margin:0"><input id="cekq" list="tklist" placeholder="mis. BBCA, PTBA, TLKM" style="flex:1;min-width:220px;max-width:520px;text-transform:uppercase" autocomplete="off"><button class="btn pri">Cek</button><button class="btn" type="button" id="cekclr">Bersihkan</button></form>
-    <div class="pill" style="margin:10px 0 0" id="cekpicks"></div></div><div id="cekres"></div>
+    <div class="pill" style="margin:10px 0 0" id="cekpicks"></div></div><div id="cekres"></div><div class="card" style="margin-top:14px" id="cekall"></div>
     <div class="note">Scalping memakai VWAP/pivot sesi berjalan; 3 hari–2 minggu memakai momentum & tren MA; 3 bulan memakai tren MA50/200 + fundamental; 1 tahun memakai kualitas fundamental & valuasi. Tanggal jual = perkiraan hari bursa (tidak menghitung libur nasional).</div>`;
     $('#cekf').onsubmit=e=>{e.preventDefault();const list=$('#cekq').value.toUpperCase().split(/[\s,;]+/).map(s=>s.replace(/\.JK$/,'').replace(/^IDX:/,'')).filter(Boolean);if(!list.length)return;cekList=[...new Set(list)].slice(0,10);LS.set('idx_cek',cekList);drawCek()};
     $('#cekclr').onclick=()=>{cekList=[];LS.set('idx_cek',[]);$('#cekq').value='';drawCek()};}
   $('#cekpicks').innerHTML='<span class="status">Contoh (top rekomendasi):</span> '+picks.map(t=>`<button class="btn sm" data-cek="${t}">${t}</button>`).join(' ');
   $$('[data-cek]').forEach(b=>b.onclick=()=>{cekList=[b.dataset.cek];LS.set('idx_cek',cekList);$('#cekq').value=b.dataset.cek;drawCek()});
-  drawCek(true);
+  drawCek(true);drawCekAll();
 }
 async function drawCek(fromCache){
   const box=$('#cekres');if(!box)return;if(!cekList.length){box.innerHTML='';return}
@@ -914,6 +925,20 @@ async function drawCek(fromCache){
   box.innerHTML=rows.join('');if(rows.length===1)box.querySelector('details')?.setAttribute('open','');enableSort(box);
 }
 
+
+function drawCekAll(){const el=$('#cekall');if(!el)return;const H=Object.fromEntries(HZ.map(x=>[x[0],x]));
+  const f=el.dataset.f||'',onlyOk=el.dataset.ok!=='0';
+  const list=D.all.filter(r=>r.avgVal>=CFG.minValUniverse&&r.last>=50).map(r=>{const ev=evalHorizons(r);const ok=ev.filter(e=>e.ok&&(!f||e.h===f)).sort((a,b)=>b.score-a.score);return {r,b:ok[0]||null}})
+    .filter(x=>onlyOk?x.b:true).sort((a,b)=>(b.b?b.b.score:-1)-(a.b?a.b.score:-1));
+  el.innerHTML=`<h3>📋 Rekomendasi Semua Saham <small>jangka paling cocok, harga beli/jual, stop loss & lama simpan · ${list.length} saham</small></h3>
+   <div class="pill"><select id="ca-h"><option value="">Semua jangka</option>${HZ.map(x=>`<option value="${x[0]}" ${f===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select>
+   <label class="status"><input type="checkbox" id="ca-ok" ${onlyOk?'checked':''}> Hanya yang cocok (sembunyikan "Tunggu/Hindari")</label></div>
+   <div class="tw"><table><tr><th class="l">Saham</th><th>Harga</th><th>%</th><th class="l">Jangka</th><th>Skor</th><th>Beli</th><th>Jual</th><th>Potensi</th><th>Stop</th><th class="l">Simpan</th><th></th></tr>
+   ${list.map(({r,b})=>{if(!b)return `<tr><td class="l">${tk(r.ticker)}</td><td>${px(r.last)}</td><td>${pcs(r.chg)}</td><td class="l"><span class="b ${r.gorengan?'r':'y'}">${r.gorengan?'Hindari':'Tunggu'}</span></td><td data-v="">–</td><td>–</td><td>–</td><td data-v="">–</td><td>–</td><td class="l">–</td><td>${syb(r.syariah)}</td></tr>`;
+     const pl=b.plan,x=H[b.h];return `<tr><td class="l">${tk(r.ticker)}</td><td>${px(r.last)}</td><td>${pcs(r.chg)}</td><td class="l"><span class="b g">${x[1]}</span></td><td data-v="${b.score}"><b>${b.score}</b></td>
+     <td>${px(pl.entry_lo)}–${px(pl.entry)}</td><td class="up">${px(pl.target)}</td><td data-v="${pl.target/pl.entry-1}">${pcs(pl.target/pl.entry-1)}</td><td class="down">${px(pl.stop)}</td>
+     <td class="l" style="font-size:12px">${esc(x[2].split(',')[0])}${x[3]?` · ± ${addBizDays(x[3])}`:''}</td><td>${syb(r.syariah)}</td></tr>`}).join('')||'<tr><td colspan="11" class="l mut">Tidak ada</td></tr>'}</table></div>`;
+  $('#ca-h').onchange=e=>{el.dataset.f=e.target.value;drawCekAll()};$('#ca-ok').onchange=e=>{el.dataset.ok=e.target.checked?'1':'0';drawCekAll()};enableSort(el);}
 // ---------- BERITA ----------
 let newsAt=0;
 async function renderNews(){

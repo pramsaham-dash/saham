@@ -35,7 +35,7 @@ main{padding:16px;max-width:1400px;margin:0 auto}
 .tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;font-size:13px}
 th{color:var(--mut);font-weight:600;font-size:12px;cursor:default;position:sticky;top:0;background:var(--card)}
-main th{cursor:pointer;user-select:none}main th:hover{color:var(--ink)}main th:empty{cursor:default}.sorti{color:var(--acc);margin-left:3px}td.n,th.n{text-align:right}
+main th{cursor:pointer;user-select:none}main th:hover{color:var(--ink)}main th:empty{cursor:default}.sorti{color:var(--acc);margin-left:3px}.pager{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--mut)}.pager button{background:var(--chip);color:var(--ink);padding:4px 10px;font-size:13px}.pager button.on{background:var(--acc);color:#fff}.pager button:disabled{opacity:.4;cursor:default}td.n,th.n{text-align:right}
 .up{color:var(--up)}.down{color:var(--down)}.mut{color:var(--mut)}
 .b{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;background:var(--chip);white-space:nowrap}
 .b.g{background:var(--upbg);color:var(--up)}.b.r{background:var(--downbg);color:var(--down)}.b.y{background:var(--ambbg);color:var(--amb)}
@@ -960,7 +960,8 @@ function sortTable(tb,col,dir){
     if(more){r.classList.remove('more-'+more,'hide');if(k>=5){r.classList.add('more-'+more);if(!open)r.classList.add('hide')}}
     par.appendChild(r)});
   tb.querySelectorAll('.sorti').forEach(x=>x.remove());
-  const h=headGrid(tb).find(x=>x.col===col); if(h)h.th.insertAdjacentHTML('beforeend',`<span class="sorti">${dir>0?'▲':'▼'}</span>`)}
+  const h=headGrid(tb).find(x=>x.col===col); if(h)h.th.insertAdjacentHTML('beforeend',`<span class="sorti">${dir>0?'▲':'▼'}</span>`);
+  if(tb.dataset.paged){PAGES[tkey(tb)]=1;paginate(tb)}}
 document.addEventListener('click',e=>{
   const th=e.target.closest('main th'); if(!th||!th.textContent.trim())return;
   const tb=th.closest('table'),h=headGrid(tb).find(x=>x.th===th); if(!h)return;
@@ -968,8 +969,29 @@ document.addEventListener('click',e=>{
   let dir; if(prev&&prev.col===h.col)dir=-prev.dir;
   else{const v=[...tb.rows].filter(r=>r.querySelector('td')).map(r=>cellVal(r.cells[h.col])).filter(x=>x!=null);dir=v.length&&typeof v[0]==='number'?-1:1}
   SORTS[key]={col:h.col,dir}; sortTable(tb,h.col,dir)});
+/* ---------------- Halaman tabel: 15 baris per halaman ---------------- */
+const PER_PAGE=10, PAGES={};
+const dataRows=tb=>[...tb.rows].filter(r=>r.querySelector('td')&&!(r.cells.length===1&&r.cells[0].colSpan>1));
+function paginate(tb){
+  tb.dataset.paged='1';
+  const rows=dataRows(tb), anchor=tb.closest('.tw')||tb, key=tkey(tb);
+  let pg=anchor.nextElementSibling&&anchor.nextElementSibling.classList.contains('pager')?anchor.nextElementSibling:null;
+  if(rows.length<=PER_PAGE){rows.forEach(r=>r.style.display='');if(pg)pg.remove();return}
+  const n=Math.ceil(rows.length/PER_PAGE), cur=Math.min(Math.max(PAGES[key]||1,1),n); PAGES[key]=cur;
+  rows.forEach((r,i)=>r.style.display=(i>=(cur-1)*PER_PAGE&&i<cur*PER_PAGE)?'':'none');
+  if(!pg){pg=document.createElement('div');pg.className='pager';anchor.after(pg)}
+  pg._tb=tb;
+  const nums=[];for(let i=1;i<=n;i++)if(i===1||i===n||Math.abs(i-cur)<=2)nums.push(i);else if(nums[nums.length-1]!=='…')nums.push('…');
+  const a=(cur-1)*PER_PAGE+1,b=Math.min(cur*PER_PAGE,rows.length);
+  pg.innerHTML=`<button data-pg="1" ${cur===1?'disabled':''} title="Halaman pertama">«</button><button data-pg="${cur-1}" ${cur===1?'disabled':''}>‹ Sebelumnya</button>`+
+    nums.map(i=>i==='…'?'<span>…</span>':`<button data-pg="${i}" class="${i===cur?'on':''}">${i}</button>`).join('')+
+    `<button data-pg="${cur+1}" ${cur===n?'disabled':''}>Berikutnya ›</button><button data-pg="${n}" ${cur===n?'disabled':''} title="Halaman terakhir">»</button><span style="margin-left:6px">Baris ${a}–${b} dari ${rows.length} · halaman ${cur}/${n}</span>`;
+}
+document.addEventListener('click',e=>{const b=e.target.closest('.pager button[data-pg]'); if(!b||b.disabled)return;
+  const tb=b.parentNode._tb; if(!tb)return; PAGES[tkey(tb)]=+b.dataset.pg; paginate(tb);
+  const top=(tb.closest('.card')||tb).getBoundingClientRect().top; if(top<0) (tb.closest('.card')||tb).scrollIntoView({block:'start'})});
 let sortT=null;
-new MutationObserver(()=>{clearTimeout(sortT);sortT=setTimeout(()=>{$$('main table').forEach(tb=>{if(tb.dataset.sorted)return;const s2=SORTS[tkey(tb)];if(s2)sortTable(tb,s2.col,s2.dir)})},30)}).observe($('main'),{childList:true,subtree:true});
+new MutationObserver(()=>{clearTimeout(sortT);sortT=setTimeout(()=>{$$('main table').forEach(tb=>{if(!tb.dataset.sorted){const s2=SORTS[tkey(tb)];if(s2)sortTable(tb,s2.col,s2.dir)} if(!tb.dataset.paged)paginate(tb)})},30)}).observe($('main'),{childList:true,subtree:true});
 E.setProg(m=>{ if(m) $('#upd').textContent=m; $$('.prog').forEach(x=>x.textContent=m); const b=$('#enrich'); if(b) b.textContent=m?'⏳ '+m:''});
 if(sessionStorage.getItem('auth')){$('#login').classList.add('hide'); start()}
 </script>

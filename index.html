@@ -126,8 +126,11 @@
   @keyframes spin{to{transform:rotate(360deg)}}
 
   /* ========== RESPONSIVE ========== */
-  @media (max-width:1000px){
+  @media (max-width:1280px){
     .brand-text,.status{display:none}
+  }
+  @media (max-width:980px){
+    .tab .long{display:none}
   }
   @media (max-width:640px){
     .navbar{gap:10px;padding:0 10px;height:56px}
@@ -158,7 +161,15 @@
     </button>
     <button class="tab" data-src="Dashboard-Saham-Indonesia.html" data-title="Dashboard Saham Indonesia">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-      Dashboard<span class="long">&nbsp;Saham Indonesia</span>
+      <span class="long">Dashboard Saham&nbsp;</span>Indonesia
+    </button>
+    <button class="tab" data-src="IDX_Stock_Dashboard.html" data-title="IDX Stock Dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="4" x2="6" y2="20"/><rect x="4" y="8" width="4" height="7" rx="1"/><line x1="12" y1="3" x2="12" y2="21"/><rect x="10" y="6" width="4" height="10" rx="1"/><line x1="18" y1="5" x2="18" y2="19"/><rect x="16" y="9" width="4" height="6" rx="1"/></svg>
+      IDX Stock<span class="long">&nbsp;Dashboard</span>
+    </button>
+    <button class="tab" data-src="Dashboard-Saham-IDX.html" data-title="Dashboard Saham IDX">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>
+      <span class="long">Dashboard&nbsp;</span>Saham IDX
     </button>
   </div>
 

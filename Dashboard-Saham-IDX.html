@@ -74,7 +74,7 @@ dialog::backdrop{background:#0006}
   <label class="status">Auto-refresh
     <select id="ri"><option value="0">Mati</option><option value="1">1 menit (tercepat)</option><option value="2">2 menit</option><option value="5">5 menit</option><option value="10">10 menit</option><option value="15">15 menit</option></select>
   </label>
-  <div class="status"><span class="dot" id="dot"></span><span id="upd">-</span><span id="cd"></span><span id="sess"></span></div>
+  <div class="status"><span class="dot" id="dot"></span><span id="upd">-</span><span id="cd"></span><span id="sess"></span><span id="fresh"></span></div>
   <button class="ghost sm" id="lo" style="margin-left:auto">Keluar</button>
 </header>
 <nav id="nav">
@@ -88,6 +88,48 @@ dialog::backdrop{background:#0006}
   <section id="t-porto" class="hide"></section><section id="t-sumber" class="hide"></section>
   <p class="note">⚠️ Analisis otomatis untuk edukasi, bukan ajakan jual/beli. Data diambil langsung dari TradingView, Yahoo Finance & Google News oleh browser Anda (bisa tertunda ±10–15 menit). Portofolio tersimpan di browser ini. Status halal adalah indikasi; verifikasi dengan Daftar Efek Syariah OJK / ISSI.</p>
 </main>
+<textarea id="wsrc" hidden>// Proxy pribadi untuk Dashboard Saham IDX - Cloudflare Workers (gratis, 100.000 request/hari)
+// Hanya meneruskan permintaan ke sumber data saham di bawah ini.
+const ALLOW = [&#x27;scanner.tradingview.com&#x27;, &#x27;query1.finance.yahoo.com&#x27;, &#x27;query2.finance.yahoo.com&#x27;, &#x27;news.google.com&#x27;];
+const CORS = {
+  &#x27;Access-Control-Allow-Origin&#x27;: &#x27;*&#x27;,
+  &#x27;Access-Control-Allow-Methods&#x27;: &#x27;GET,POST,OPTIONS&#x27;,
+  &#x27;Access-Control-Allow-Headers&#x27;: &#x27;Content-Type&#x27;
+};
+export default {
+  async fetch(req) {
+    if (req.method === &#x27;OPTIONS&#x27;) return new Response(null, { headers: CORS });
+    const target = new URL(req.url).searchParams.get(&#x27;url&#x27;);
+    let host = &#x27;&#x27;;
+    try { host = new URL(target).hostname; } catch (e) {}
+    if (!ALLOW.includes(host)) return new Response(&#x27;Alamat tidak diizinkan&#x27;, { status: 403, headers: CORS });
+    const headers = {
+      &#x27;User-Agent&#x27;: &#x27;Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36&#x27;,
+      &#x27;Accept&#x27;: &#x27;*/*&#x27;,
+      &#x27;Accept-Language&#x27;: &#x27;id-ID,id;q=0.9,en;q=0.8&#x27;
+    };
+    const init = { method: req.method, headers };
+    if (req.method === &#x27;POST&#x27;) {
+      init.body = await req.text();
+      headers[&#x27;Content-Type&#x27;] = &#x27;application/json&#x27;;
+      if (host.includes(&#x27;tradingview&#x27;)) {
+        headers[&#x27;Origin&#x27;] = &#x27;https://www.tradingview.com&#x27;;
+        headers[&#x27;Referer&#x27;] = &#x27;https://www.tradingview.com/&#x27;;
+      }
+    }
+    try {
+      const r = await fetch(target, init);
+      const body = await r.arrayBuffer();
+      return new Response(body, {
+        status: r.status,
+        headers: { ...CORS, &#x27;Content-Type&#x27;: r.headers.get(&#x27;Content-Type&#x27;) || &#x27;application/json&#x27;, &#x27;Cache-Control&#x27;: &#x27;no-store&#x27; }
+      });
+    } catch (e) {
+      return new Response(&#x27;Gagal: &#x27; + e.message, { status: 502, headers: CORS });
+    }
+  }
+};
+</textarea>
 <dialog id="dlg"><form method="dialog" id="df"></form></dialog>
 
 <script>
@@ -138,35 +180,53 @@ const PROXIES=[
   {id:'codetabs',name:'codetabs.com',wrap:u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u),post:false},
   {id:'thingproxy',name:'thingproxy',wrap:u=>'https://thingproxy.freeboard.io/fetch/'+u,post:true},
 ];
+/* ---------- Koneksi stabil ----------
+   - Proxy pribadi (bila diisi) selalu dicoba pertama.
+   - Tiap jalur dipantau: yang gagal 2x / kena limit (403/429) diistirahatkan beberapa menit.
+   - Isi jawaban diperiksa (proxy kadang membalas halaman error dengan status 200).
+   - Gagal? dicoba ulang bertahap: jalur terbaik -> 2 jalur sehat berikutnya -> semua jalur, lalu 1 putaran lagi. */
+const HEALTH={};
+const healthy=p=>!HEALTH[p.id]||Date.now()>=HEALTH[p.id].until;
+function markBad(p,e){const h=HEALTH[p.id]=HEALTH[p.id]||{fail:0,until:0};h.fail++;const lim=/HTTP (403|429|5\d\d)/.test(String(e&&e.message));
+  if(h.fail>=2||lim)h.until=Date.now()+Math.min(10*60e3,(lim?90e3:45e3)*h.fail)}
 function proxyList(method,src){
   const cfg=LS.get('proxycfg',{mode:'auto',custom:''});
   let list=[...PROXIES];
-  if(cfg.custom){const pre=cfg.custom; list.unshift({id:'custom',name:'Proxy kustom',wrap:u=>pre.includes('{url}')?pre.replace('{url}',encodeURIComponent(u)):pre+encodeURIComponent(u),post:true})}
   if(cfg.mode!=='auto'){const f=list.find(p=>p.id===cfg.mode); if(f) list=[f,...list.filter(p=>p!==f)]}
   const w=WORK[src]; if(w){const f=list.find(p=>p.id===w); if(f) list=[f,...list.filter(p=>p!==f)]}
+  list=[...list.filter(healthy),...list.filter(p=>!healthy(p))];
+  if(cfg.custom){const pre=cfg.custom.trim(); list.unshift({id:'custom',name:'Proxy pribadi',wrap:u=>pre.includes('{url}')?pre.replace('{url}',encodeURIComponent(u)):pre+encodeURIComponent(u),post:true})}
   return list.filter(p=>method==='GET'||p.post);
 }
 const WORK=LS.get('proxywork',{});
 async function tryProxy(p,url,o,ctl){
-  const tm=setTimeout(()=>ctl.abort(),o.timeout||20000), t0=performance.now();
-  try{const opt={method:o.method||'GET',signal:ctl.signal};
+  const tm=setTimeout(()=>ctl.abort(),o.timeout||15000), t0=performance.now();
+  try{const opt={method:o.method||'GET',signal:ctl.signal,cache:'no-store'};
     if(o.body){opt.body=o.body; opt.headers={'Content-Type':p.id==='direct'?'text/plain;charset=UTF-8':'application/json'}}
     const r=await fetch(p.wrap(url),opt); if(!r.ok) throw new Error('HTTP '+r.status);
-    const t=await r.text(); return {out:o.text?t:JSON.parse(t),ms:Math.round(performance.now()-t0)};
+    const t=await r.text(); let out;
+    try{out=o.text?t:JSON.parse(t)}catch(e){throw new Error('jawaban bukan data (proxy error)')}
+    if(o.check&&!o.check(out)) throw new Error('isi data tidak valid');
+    return {out,ms:Math.round(performance.now()-t0)};
   }finally{clearTimeout(tm)}
 }
-function markOk(src,p,ms){if(WORK[src]!==p.id){WORK[src]=p.id;LS.set('proxywork',WORK)} STATUS[src]={ok:true,time:nowStr(),via:p.name,ms}}
-/* Koneksi tercepat: pakai jalur yang terakhir berhasil; bila gagal, semua jalur dicoba
-   BERSAMAAN dan jawaban tercepat yang dipakai (lalu diingat). */
-async function xfetch(url,{method='GET',body=null,src='Web',timeout=20000,text=false}={}){
-  const list=proxyList(method,src), o={method,body,timeout,text};
-  const pinned=!!WORK[src]||LS.get('proxycfg',{mode:'auto'}).mode!=='auto';
-  if(pinned&&list[0]){try{const r=await tryProxy(list[0],url,{...o,timeout:Math.min(timeout,12000)},new AbortController());markOk(src,list[0],r.ms);return r.out}catch(e){}}
-  const rest=pinned?list.slice(1):list, ctls=rest.map(()=>new AbortController());
-  try{const w=await Promise.any(rest.map((p,i)=>tryProxy(p,url,o,ctls[i]).then(r=>({...r,p}))));
-    ctls.forEach(c=>c.abort()); markOk(src,w.p,w.ms); return w.out;
-  }catch(e){const m=((e.errors||[e]).map(x=>x&&x.message).filter(Boolean)[0])||'';
-    STATUS[src]={ok:false,time:nowStr(),err:'Semua jalur gagal: '+m}; throw new Error(src+' tidak dapat diakses ('+m+')')}
+function markOk(src,p,ms){if(p.id!=='custom'&&WORK[src]!==p.id){WORK[src]=p.id;LS.set('proxywork',WORK)} HEALTH[p.id]={fail:0,until:0,ms}; STATUS[src]={ok:true,time:nowStr(),via:p.name,ms}}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function race(ps,url,o,src){const ctls=ps.map(()=>new AbortController());
+  try{const w=await Promise.any(ps.map((p,i)=>tryProxy(p,url,o,ctls[i]).then(r=>({...r,p}),e=>{markBad(p,e);throw e})));ctls.forEach(c=>c.abort());markOk(src,w.p,w.ms);return w.out}
+  catch(e){throw new Error(((e.errors||[e]).map(x=>x&&x.message).filter(Boolean)[0])||'gagal')}}
+async function xfetch(url,{method='GET',body=null,src='Web',timeout=10000,text=false,check=null}={}){
+  const o={method,body,timeout,text,check}; let last='';
+  for(let round=0;round<2;round++){
+    const list=proxyList(method,src); if(!list.length)break;
+    try{const r=await tryProxy(list[0],url,o,new AbortController());markOk(src,list[0],r.ms);return r.out}catch(e){markBad(list[0],e);last=e.message}
+    const nxt=list.slice(1).filter(healthy).slice(0,2);
+    if(nxt.length){try{return await race(nxt,url,o,src)}catch(e){last=e.message}}
+    const rest=list.slice(1).filter(p=>!nxt.includes(p));
+    if(rest.length){try{return await race(rest,url,{...o,timeout:timeout+3000},src)}catch(e){last=e.message}}
+    if(round===0)await sleep(800);
+  }
+  STATUS[src]={ok:false,time:nowStr(),err:'Semua jalur gagal: '+last}; throw new Error(src+' tidak dapat diakses ('+last+')');
 }
 async function speedTest(){
   const url='https://query1.finance.yahoo.com/v8/finance/chart/BBCA.JK?range=5d&interval=1d';
@@ -182,25 +242,63 @@ const TV_URL='https://scanner.tradingview.com/indonesia/scan';
 const TV_CORE=["name","description","close","change","volume","market_cap_basic","sector","industry"];
 const TV_OPT=["open","high","low","average_volume_10d_calc","relative_volume_10d_calc","price_earnings_ttm","price_book_fq","return_on_equity","debt_to_equity","net_margin","free_cash_flow","cash_n_short_term_invest_fq","total_revenue","net_income","earnings_per_share_diluted_ttm","total_revenue_yoy_growth_ttm","RSI","SMA20","SMA50","SMA200","ATR","Volatility.D","Perf.W","Perf.1M","Perf.3M","Perf.Y","Recommend.All","gap","dividend_yield_recent"];
 function tvQuery(cols,rng=[0,1200],tickers=[]){
-  return xfetch(TV_URL,{method:'POST',src:'TradingView',timeout:30000,body:JSON.stringify({filter:[{left:"type",operation:"equal",right:"stock"}],options:{lang:"en"},markets:["indonesia"],symbols:{query:{types:[]},tickers},columns:cols,sort:{sortBy:"market_cap_basic",sortOrder:"desc"},range:rng})});
+  return xfetch(TV_URL,{method:'POST',src:'TradingView',timeout:12000,check:j=>j&&Array.isArray(j.data),body:JSON.stringify({filter:[{left:"type",operation:"equal",right:"stock"}],options:{lang:"en"},markets:["indonesia"],symbols:{query:{types:[]},tickers},columns:cols,sort:{sortBy:"market_cap_basic",sortOrder:"desc"},range:rng})});
 }
 let TVCOLS=null;
 async function tvColumns(){
   if(TVCOLS) return TVCOLS;
-  const c=LS.get('tvcols',null); if(c&&Date.now()-c.t<7*864e5){TVCOLS=c.v;return TVCOLS}
-  try{await tvQuery([...TV_CORE,...TV_OPT],[0,1]); TVCOLS=[...TV_CORE,...TV_OPT]}
-  catch(e){ await tvQuery(TV_CORE,[0,1]); const ok=[]; for(const col of TV_OPT){try{await tvQuery([...TV_CORE,col],[0,1]);ok.push(col)}catch(_){}} TVCOLS=[...TV_CORE,...ok]}
-  LS.set('tvcols',{t:Date.now(),v:TVCOLS}); return TVCOLS;
+  const c=LS.get('tvcols',null); TVCOLS=c&&Date.now()-c.t<7*864e5?c.v:[...TV_CORE,...TV_OPT]; return TVCOLS;
 }
+async function tvProbe(){const ok=[];for(const col of TV_OPT){try{await tvQuery([...TV_CORE,col],[0,1]);ok.push(col)}catch(_){}}
+  TVCOLS=[...TV_CORE,...ok];LS.set('tvcols',{t:Date.now(),v:TVCOLS});return TVCOLS}
 function tvRows(cols,js){const out={};for(const row of js.data||[]){const d={};cols.forEach((c,i)=>d[c]=row.d[i]);const t=String(d.name||row.s.split(':').pop()).toUpperCase();if(!/^[A-Z]{4}$/.test(t))continue;d.ticker=t;out[t]=d}return out}
-async function tvUniverse(){const cols=await tvColumns();const U=tvRows(cols,await tvQuery(cols));if(Object.keys(U).length<50)throw new Error('Data TradingView kosong');return U}
-async function getUniverse(force){try{return [await cached('tv',60,tvUniverse,force),'TradingView']}catch(e){return [null,'fallback']}}
+async function tvUniverse(){let cols=await tvColumns(),js;try{js=await tvQuery(cols)}catch(e){if(!/HTTP 400/.test(e.message))throw e;cols=await tvProbe();js=await tvQuery(cols)}const U=tvRows(cols,js);if(Object.keys(U).length<50)throw new Error('Data TradingView kosong');return U}
+/* Harga pasar: TradingView (1 request). Jika gagal -> data TradingView terakhir yang tersimpan
+   + harga terbaru dari Yahoo "spark" (GET, 20 saham per request). Data baik tidak pernah ditimpa error. */
+const FRESH={price:null};
+let ULAST=null;
+function saveULast(U){try{const cols=[...(TVCOLS||TV_CORE),'ticker'],rows=Object.values(U).map(d=>cols.map(c=>d[c]??null));
+  localStorage.setItem('tvlast',JSON.stringify({t:Date.now(),cols,rows}))}catch(e){} ULAST={t:Date.now(),U}}
+function loadULast(){if(ULAST)return ULAST;const e=LS.get('tvlast',null);if(!e)return null;const U={};
+  e.rows.forEach(r=>{const d={};e.cols.forEach((c,i)=>d[c]=r[i]);U[d.ticker]=d});ULAST={t:e.t,U};return ULAST}
+async function yahooSpark(tks){
+  const out={},chunks=[];for(let i=0;i<tks.length;i+=20)chunks.push(tks.slice(i,i+20));
+  await pool(chunks.map((_,i)=>i),async i=>{
+    const u=`https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunks[i].map(t=>t+'.JK').join(',')}&range=5d&interval=1d`;
+    let js; try{js=await xfetch(u,{src:'Yahoo Finance',check:j=>j&&typeof j==='object'})}catch(e){js=await xfetch(u.replace('query1','query2').replace('/v7/','/v8/'),{src:'Yahoo Finance',check:j=>j&&typeof j==='object'})}
+    const put=(sym,cl,meta)=>{const t=String(sym).replace('.JK','');cl=(cl||[]).filter(x=>x!=null);if(!cl.length)return;
+      const price=(meta&&meta.regularMarketPrice)||cl[cl.length-1],prev=(meta&&(meta.previousClose||meta.chartPreviousClose&&cl.length<2&&meta.chartPreviousClose))||cl[cl.length-2]||price;out[t]={price,prev}};
+    if(js.spark&&js.spark.result)js.spark.result.forEach(r=>{const rs=r.response&&r.response[0];if(rs)put(r.symbol,rs.indicators&&rs.indicators.quote&&rs.indicators.quote[0].close,rs.meta)});
+    else Object.entries(js).forEach(([k,v])=>{if(v&&v.close)put(k,v.close,{previousClose:v.previousClose})});
+  },3);
+  return out}
+async function sparkUniverse(base){
+  const U={};for(const[t,d]of Object.entries(base))U[t]={...d,_stale:true};
+  const liq=Object.values(U).sort((a,b)=>s(b.close)*s(b.average_volume_10d_calc||b.volume)-s(a.close)*s(a.average_volume_10d_calc||a.volume)).slice(0,120).map(d=>d.ticker);
+  const tks=[...new Set([...liq,...portLoad().positions.map(p=>p.ticker)])],sp=await yahooSpark(tks).catch(()=>({}));
+  let n=0;for(const[t,q]of Object.entries(sp)){const d=U[t]||(U[t]={ticker:t,description:t});d.close=q.price;d.change=(q.price/q.prev-1)*100;d.open=d.high=d.low=null;d._stale=false;d._spark=true;n++}
+  return{U,n}}
+async function getUniverse(force){
+  const c=C.tv; if(c&&!force&&Date.now()-c.t<60e3)return[c.v,c.src];
+  if(INF.tv)return INF.tv;
+  const p=(async()=>{
+    try{let U;try{U=await tvUniverse()}catch(e1){await sleep(1500);U=await tvUniverse()}saveULast(U);FRESH.price={ok:true,src:'TradingView',t:Date.now(),n:Object.keys(U).length};C.tv={t:Date.now(),v:U,src:'TradingView'};return[U,'TradingView']}
+    catch(e){
+      const last=loadULast(),base=last?last.U:Object.fromEntries(FALLBACK.map(t=>[t,{ticker:t,description:t}]));
+      const {U,n}=await sparkUniverse(base);
+      if(n>0){FRESH.price={ok:true,src:'Yahoo (cadangan)',t:Date.now(),n,err:e.message};C.tv={t:Date.now(),v:U,src:'Yahoo (cadangan)'};return[U,'Yahoo (cadangan)']}
+      if(c){FRESH.price={ok:false,src:'data sebelumnya',t:c.t,err:e.message};return[c.v,c.src]}
+      if(last){FRESH.price={ok:false,src:'data tersimpan',t:last.t,err:e.message};C.tv={t:Date.now()-50e3,v:last.U,src:'data tersimpan'};return[last.U,'data tersimpan']}
+      FRESH.price={ok:false,src:'-',t:null,err:e.message};return[null,'fallback']}
+    finally{delete INF.tv}})();
+  INF.tv=p;return p}
 
 /* ---------- Yahoo ---------- */
 async function yahooChart(sym,range='1y',interval='1d'){
   const ys=sym.startsWith('^')||sym.includes('.')?sym:sym+'.JK';
   const u=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ys)}?range=${range}&interval=${interval}&includePrePost=false`;
-  let js; try{js=await xfetch(u,{src:'Yahoo Finance',timeout:15000})}catch(e){js=await xfetch(u.replace('query1','query2'),{src:'Yahoo Finance',timeout:15000})}
+  const ck=j=>j&&j.chart&&j.chart.result&&j.chart.result[0]&&j.chart.result[0].indicators;
+  let js; try{js=await xfetch(u,{src:'Yahoo Finance',check:ck})}catch(e){js=await xfetch(u.replace('query1','query2'),{src:'Yahoo Finance',check:ck})}
   const res=js.chart.result[0], ts=res.timestamp||[], q=res.indicators.quote[0], bars=[];
   ts.forEach((t,i)=>{const c=q.close[i]; if(c==null)return; bars.push({t,o:q.open[i]??c,h:q.high[i]??c,l:q.low[i]??c,c,v:q.volume[i]||0})});
   const m=res.meta||{}; return {bars,price:m.regularMarketPrice,prev:m.chartPreviousClose||m.previousClose,name:m.longName||m.shortName};
@@ -212,7 +310,7 @@ async function yahooFund(t,force){
   if(e&&!force&&Date.now()-e._ts<7*864e5) return e;
   const types=FUND_TYPES.map(x=>'annual'+x).join(',');
   const u=`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${t}.JK?symbol=${t}.JK&type=${types}&period1=1420070400&period2=${Math.floor(Date.now()/1e3)}&merge=false&padTimeSeries=true`;
-  const js=await xfetch(u,{src:'Yahoo Finance',timeout:20000}); const years={};
+  const js=await xfetch(u,{src:'Yahoo Finance',timeout:20000,check:j=>j&&j.timeseries}); const years={};
   for(const it of (js.timeseries&&js.timeseries.result)||[]){const typ=((it.meta||{}).type||[''])[0], key=typ.replace('annual','');
     for(const v of it[typ]||[]){if(!v||!v.reportedValue)continue; const y=v.asOfDate.slice(0,4); (years[y]=years[y]||{})[key]=v.reportedValue.raw}}
   const ys=Object.keys(years).sort().slice(-5), out={years:ys,data:ys.map(y=>years[y]),_ts:Date.now()};
@@ -222,7 +320,7 @@ async function yahooFund(t,force){
 /* ---------- Google News ---------- */
 async function news(q,n=6){
   try{return await cached('news:'+q,1800,async()=>{
-    const t=await xfetch(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=id&gl=ID&ceid=ID:id`,{src:'Google News',text:true,timeout:15000});
+    const t=await xfetch(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=id&gl=ID&ceid=ID:id`,{src:'Google News',text:true,timeout:15000,check:t=>/<rss|<item/.test(t)});
     const doc=new DOMParser().parseFromString(t,'text/xml');
     return [...doc.querySelectorAll('item')].slice(0,n).map(it=>({title:(it.querySelector('title')||{}).textContent,link:(it.querySelector('link')||{}).textContent,date:(it.querySelector('pubDate')||{}).textContent,source:(it.querySelector('source')||{}).textContent||''}));
   })}catch(e){return []}
@@ -277,10 +375,10 @@ function barsSet(t,bars){const b=bars.slice(-320),r=x=>Math.round(x*100)/100,val
   try{localStorage.setItem('bars:'+t,val)}catch(e){try{Object.keys(localStorage).filter(k=>k.startsWith('bars:')).sort(()=>Math.random()-.5).slice(0,30).forEach(k=>localStorage.removeItem(k));localStorage.setItem('bars:'+t,val)}catch(_){}}}
 const barsFresh=t=>{const e=LS.get('bars:'+t,null);return !!e&&Date.now()-e.ts<BARS_TTL};
 function mergeLive(bars,d){
-  if(!d||!d.close||!bars.length)return bars;const b=bars.slice(),last=b[b.length-1],w=wib(),today=w.toISOString().slice(0,10),wd=w.getUTCDay();
+  if(!d||!d.close||d._stale||!bars.length)return bars;const b=bars.slice(),last=b[b.length-1],w=wib(),today=w.toISOString().slice(0,10),wd=w.getUTCDay();
   const bar={t:Math.floor(Date.now()/1e3),o:d.open||d.close,h:Math.max(d.high||d.close,d.close),l:Math.min(d.low||d.close,d.close),c:d.close,v:d.volume||0};
   if(wibDate(last.t).day===today)b[b.length-1]={...bar,t:last.t};
-  else if(wd>=1&&wd<=5&&w.getUTCHours()>=9&&d.volume>0)b.push(bar);
+  else if(wd>=1&&wd<=5&&w.getUTCHours()>=9&&(d.volume>0||d._spark))b.push(bar);
   return b}
 async function techFor(t,force,live,allowFetch=true){
   let c=barsGet(t);
@@ -412,7 +510,7 @@ async function scalping(rows,allowFetch){
     return{...baseItem(r),pagi,siang,avg_range:tk.avg_range,value:tk.value_avg}});
 }
 function gorengan(U){const out=[];
-  for(const [t,d] of Object.entries(U)){const p=s(d.close),ch=s(d.change),rv=s(d.relative_volume_10d_calc,1),mc=s(d.market_cap_basic),pw=s(d['Perf.W']),pm=s(d['Perf.1M']),per=d.price_earnings_ttm,pbv=d.price_book_fq,val=p*s(d.volume);
+  for(const [t,d] of Object.entries(U)){if(d._stale||d._spark)continue;const p=s(d.close),ch=s(d.change),rv=s(d.relative_volume_10d_calc,1),mc=s(d.market_cap_basic),pw=s(d['Perf.W']),pm=s(d['Perf.1M']),per=d.price_earnings_ttm,pbv=d.price_book_fq,val=p*s(d.volume);
     if(val<5e8)continue;const f=[];let sc=0;
     if(rv>=3){f.push(`Volume ${rv.toFixed(1)}x rata-rata`);sc+=Math.min(rv,10)*3}
     if(Math.abs(ch)>=10){f.push(`Harga ${ch>0?'+':''}${ch.toFixed(1)}% hari ini`);sc+=Math.abs(ch)}
@@ -452,12 +550,12 @@ async function buildSnapshot(force,full){
   const [U,src]=await getUniverse(force), med=U?industryMedians(U):{}; if(!U) full=true;
   let cands=U?Object.values(U).sort((a,b)=>s(b.close)*s(b.average_volume_10d_calc||b.volume)-s(a.close)*s(a.average_volume_10d_calc||a.volume)).slice(0,N_TECH).map(d=>d.ticker):FALLBACK.slice(0,N_TECH);
   const port=portLoad().positions.map(p=>p.ticker); cands=[...new Set([...cands,...port])];
-  let done=0; const T=await pool(cands,async t=>{const r=await techFor(t,force,(U||{})[t],full);if(full)PROG(`Riwayat harga ${++done}/${cands.length}…`);return r},full?8:50);
+  let done=0; const T=await pool(cands,async t=>{const r=await techFor(t,force,(U||{})[t],full);if(full)PROG(`Riwayat harga ${++done}/${cands.length}…`);return r},full?5:50);
   const missB=cands.filter(t=>!barsFresh(t)).length;
   for(const t of cands)if(!T[t]&&U&&U[t])T[t]=techFromTV(U[t]);
   const pre=t=>{const d=(U||{})[t]||{};let v=0;if(s(d.return_on_equity)>15)v+=2;if(d.debt_to_equity!=null&&d.debt_to_equity<1)v++;if(s(d.net_margin)>s(medFor(med,d,'npm')))v++;if(s(d.free_cash_flow)>0)v++;if(s(d.price_earnings_ttm)>0)v++;return v+s(d.market_cap_basic)/1e15};
   const fc=[...new Set([...cands.filter(t=>T[t]).sort((a,b)=>pre(b)-pre(a)).slice(0,N_FUND),...port])];
-  done=0; const F=full?await pool(fc,async t=>{const r=await yahooFund(t,false).catch(()=>null);PROG(`Laporan keuangan ${++done}/${fc.length}…`);return r},8):Object.fromEntries(fc.map(t=>[t,fundCached(t)]));
+  done=0; const F=full?await pool(fc,async t=>{const r=await yahooFund(t,false).catch(()=>null);PROG(`Laporan keuangan ${++done}/${fc.length}…`);return r},4):Object.fromEntries(fc.map(t=>[t,fundCached(t)]));
   const missF=fc.filter(t=>!fundCached(t)).length;
   const rows=[];
   for(const t of cands){const tk=T[t];if(!tk)continue;const tv=(U||{})[t]||{},hasF=!!F[t];
@@ -472,13 +570,15 @@ async function buildSnapshot(force,full){
       return{...baseItem(r),entry:`${rp(Math.max(pv.S1,e*.99),'down')} - ${rp(e)}`,target:rp(e*1.03,'up'),target2:rp(Math.max(pv.R1,e*1.045),'up'),stop:rp(e*.985,'down'),hit3:tk.hit3*100,atr_pct:tk.atr_pct}});
   const scalp=await scalping(rows,full);
   PROG('');
+  const failed=full?cands.filter(t=>!T[t]||!T[t].series).length:0;
   const quick=rows.map(r=>({...baseItem(r),v:verdict(r.tk,r.sc,planAll(r.tk),r.has_fund)}));
-  return{quick,partial:!full&&(missB>0||missF>0),missing:missB+missF,updated:nowStr(),source:src,recs,daytrade:day,scalping:scalp,gorengan:U?gorengan(U):[],session:session(),
+  return{fresh:{...FRESH.price},failed,quick,partial:!full&&(missB>0||missF>0),missing:missB+missF,updated:nowStr(),source:src,recs,daytrade:day,scalping:scalp,gorengan:U?gorengan(U):[],session:session(),
     screener:rows.filter(r=>r.fe).map(screenRow).sort((a,b)=>b.score-a.score),universe_count:U?Object.keys(U).length:FALLBACK.length};
 }
 let ENRICH=null, ONUPD=()=>{};
 async function snapshot(force){
   const sn=await cached('snap',60,()=>buildSnapshot(force,false),force);
+  sn.fresh={...(FRESH.price||{})};
   if(sn.partial&&!ENRICH){ENRICH=(async()=>{try{const f=await buildSnapshot(false,true);C.snap={t:Date.now(),v:f};ONUPD(f)}catch(e){}finally{ENRICH=null;PROG('')}})()}
   return sn}
 
@@ -486,7 +586,7 @@ async function overview(force){return cached('ov',60,async()=>{
   const [U,src]=await getUniverse(force),o={updated:nowStr(),source:src};
   try{const ih=await yahooChart('^JKSE','1y','1d'),b=ih.bars,c=b.map(x=>x.c),price=ih.price||c[c.length-1];
     o.ihsg={price,chg:(price/c[c.length-2]-1)*100,t:b.map(x=>x.t),c,ma20:sma(c,20),ma50:sma(c,50)}}catch(e){o.ihsg=null}
-  if(U){const L=Object.values(U).filter(d=>d.close&&d.volume),liq=L.filter(d=>d.close*d.volume>1e9);
+  if(U){const L=Object.values(U).filter(d=>d.close&&d.volume&&!d._stale),liq=L.filter(d=>d.close*d.volume>1e9);
     const pick=d=>({ticker:d.ticker,name:d.description,price:d.close,chg:d.change,value:d.close*d.volume,rvol:d.relative_volume_10d_calc});
     o.gainers=[...liq].sort((a,b)=>s(b.change)-s(a.change)).slice(0,10).map(pick);
     o.losers=[...liq].sort((a,b)=>s(a.change)-s(b.change)).slice(0,10).map(pick);
@@ -551,8 +651,10 @@ function portAction(b){
 }
 function clearCache(){for(const k in C)delete C[k];TVCOLS=null;try{Object.keys(localStorage).filter(k=>k.startsWith('fund:')||k.startsWith('bars:')||k==='tvcols'||k==='proxywork').forEach(k=>localStorage.removeItem(k))}catch(e){}for(const k in WORK)delete WORK[k]}
 
+function fresh(){return FRESH.price}
+function resetMem(){for(const k in C)delete C[k];for(const k in HEALTH)delete HEALTH[k]}
 async function universe(){const [U]=await getUniverse(false);return U}
-return{verdict,speedTest,universe,onUpdate:f=>ONUPD=f,isEnriching:()=>!!ENRICH,overview,snapshot,stock,portView,portAction,portLoad,portSave,news,STATUS,session,nowStr,PROXIES,LS,clearCache,setProg:f=>PROG=f,
+return{resetMem,fresh,health:()=>HEALTH,verdict,speedTest,universe,onUpdate:f=>ONUPD=f,isEnriching:()=>!!ENRICH,overview,snapshot,stock,portView,portAction,portLoad,portSave,news,STATUS,session,nowStr,PROXIES,LS,clearCache,setProg:f=>PROG=f,
   _t:{technicals,fundEval,plan,rp,tick,advice,halal}};
 })();
 
@@ -652,9 +754,23 @@ async function render(t,force=false){
     else if(t=='detail'){ if(DETAIL&&force) await openStock(DETAIL.ticker,true); else if(DETAIL) rDetail(); else $('#t-detail').innerHTML='<div class="card load">Ketik kode saham di kotak pencarian lalu tekan Enter / Search.</div>'}
     else if(t=='porto'){ if(!PORT||force){ if(!PORT)loading('porto','Memuat portofolio…'); PORT=await api('/api/portfolio'+(force?'?force=1':''))} rPorto(); stamp(PORT.updated)}
     else if(t=='sumber') rSumber();
-  }catch(e){ if(e.message!='login') $('#t-'+t).innerHTML=`<div class="card err">Gagal memuat: ${esc(e.message)}. Periksa koneksi internet lalu tekan Refresh.</div>`; $('#dot').style.background='var(--down)'}
+  }catch(e){ if(e.message=='login')return; const had={pasar:OV,cepat:SNAP,rek:SNAP,harian:SNAP,goreng:SNAP,fund:SNAP,porto:PORT,detail:DETAIL}[t];
+    if(had&&!$('#t-'+t+' .load')){ $('#fresh').innerHTML=`<span class="b r" title="${esc(e.message)}">⚠ Refresh gagal — menampilkan data sebelumnya</span> <button class="sm" id="retry">Coba lagi</button>`; autoRetry(30) }
+    else { $('#t-'+t).innerHTML=`<div class="card err">Gagal memuat: ${esc(e.message)}. Dicoba ulang otomatis dalam 30 detik, atau buka menu <b>Sumber &amp; Berita</b> untuk memasang proxy pribadi (paling stabil).</div>`; autoRetry(30) }
+    $('#dot').style.background='var(--down)'}
 }
-function stamp(u){$('#upd').textContent='Update: '+(u||'-'); $('#dot').style.background='var(--up)'}
+function stamp(u){$('#upd').textContent='Update: '+(u||'-'); $('#dot').style.background='var(--up)'; freshBadge()}
+let RT=null, RTN=0;
+function autoRetry(sec){ if(RT||RTN>=5)return; RT=setTimeout(()=>{RT=null;RTN++;refreshAll()},sec*1000) }
+function freshBadge(){
+  const f=E.fresh(), el=$('#fresh'); if(!f){el.innerHTML='';return}
+  const age=f.t?Math.max(0,Math.round((Date.now()-f.t)/60000)):null, fail=(SNAP&&SNAP.failed)||0;
+  if(f.ok&&f.src==='TradingView'){RTN=0; el.innerHTML=` <span class="b g" title="Harga live TradingView untuk ${f.n} saham">● Harga live</span>`+(fail?` <span class="b y" title="Riwayat harga saham ini belum berhasil diunduh; dicoba lagi di refresh berikutnya">${fail} saham riwayat belum lengkap</span>`:'')}
+  else if(f.ok){el.innerHTML=` <span class="b y" title="TradingView tidak terjangkau (${esc(f.err||'')}). Harga ${f.n} saham diambil dari Yahoo; data rasio memakai TradingView terakhir.">● Harga via Yahoo (cadangan)</span>`; autoRetry(60)}
+  else{$('#dot').style.background='var(--down)'; if(f.t)$('#upd').textContent='Harga terakhir ter-update: '+new Date(f.t).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+    el.innerHTML=` <span class="b r" title="${esc(f.err||'')}">⚠ Harga belum ter-update${age!=null?' · data '+age+' mnt lalu':''}</span> <button class="sm" id="retry">Coba lagi</button>`; autoRetry(30)}
+}
+document.addEventListener('click',e=>{if(e.target.id==='retry'){RTN=0;clearTimeout(RT);RT=null;refreshAll()}});
 
 /* ---------------- Pasar ---------------- */
 function mini(list,title){return `<div class="card"><h3>${title}</h3><div class="tw"><table><tr><th>Kode</th><th class="n">Harga</th><th class="n">%</th><th class="n">Nilai</th></tr>${(list||[]).map(r=>`<tr><td>${tkL(r.ticker)}</td><td class="n">${f0(r.price)}</td><td class="n">${pct(r.chg)}</td><td class="n">${rpB(r.value)}</td></tr>`).join('')}</table></div></div>`}
@@ -865,6 +981,15 @@ async function rSumber(){
    ['IDX - Pengumuman (UMA/suspensi)','https://www.idx.co.id/id/berita/pengumuman/'],['OJK - Daftar Efek Syariah','https://www.ojk.go.id/id/kanal/syariah/data-dan-statistik/daftar-efek-syariah/default.aspx'],['IDX - Indeks Saham Syariah (ISSI)','https://www.idx.co.id/id/idx-syariah/indeks-saham-syariah/']];
   $('#t-sumber').innerHTML=`<div class="grid g2"><div class="card"><h3>Sumber data & riset</h3><ul class="news">${L.map(l=>`<li><a href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a></li>`).join('')}</ul></div>
    <div class="card"><h3>Status koneksi sumber data</h3><div id="st" class="mut">memuat…</div></div></div>
+   <div class="card" style="margin-top:14px;border-color:var(--up)"><h3>🔒 Proxy pribadi — koneksi paling stabil <small>gratis · ±5 menit · sekali saja</small></h3>
+     <p style="margin:0 0 8px">Proxy publik gratis sering kena batas atau mati, sehingga sebagian data gagal ter-update. Proxy pribadi di Cloudflare hanya dipakai oleh dashboard Anda (gratis 100.000 permintaan/hari — dashboard memakai ±5.000/hari).</p>
+     <ol style="margin:0 0 8px 18px;padding:0;line-height:1.7"><li>Buka <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">dash.cloudflare.com</a>, daftar / masuk (gratis).</li>
+     <li>Menu <b>Workers &amp; Pages</b> → <b>Create</b> → <b>Create Worker</b> → beri nama, mis. <code>proxy-saham</code> → <b>Deploy</b>.</li>
+     <li>Klik <b>Edit code</b>, hapus semua isinya, tempel kode di bawah (tombol <b>Salin kode</b>), lalu <b>Deploy</b>.</li>
+     <li>Salin alamat worker Anda (mis. <code>https://proxy-saham.nama-anda.workers.dev</code>), tempel di kolom bawah, klik <b>Simpan &amp; tes</b>.</li></ol>
+     <div class="row"><button class="ghost sm" id="wcp">📋 Salin kode worker</button><input id="wurl" placeholder="https://proxy-saham.nama-anda.workers.dev" style="flex:1;min-width:240px"><button class="sm" id="wsv">Simpan &amp; tes</button><button class="ghost sm" id="wrm">Hapus</button></div>
+     <div id="wres" class="note"></div>
+     <details style="margin-top:6px"><summary class="mut" style="cursor:pointer">Lihat kode worker</summary><pre id="wpre" style="white-space:pre-wrap;font-size:11px;background:var(--bg);padding:8px;border-radius:8px;max-height:260px;overflow:auto"></pre></details></div>
    <div class="grid g2" style="margin-top:14px"><div class="card"><h3>Pengaturan koneksi <small>proxy CORS</small></h3>
      <p class="note" style="margin-top:0">Browser memblokir file lokal mengambil data langsung dari situs lain, jadi dashboard memakai proxy publik. Mode <b>Otomatis</b> mencoba semua jalur bersamaan dan memakai yang tercepat. Tekan <b>⚡ Cari koneksi tercepat</b> bila terasa lambat, atau isi proxy sendiri (awalan URL, atau pakai <code>{url}</code>).</p>
      <div class="row"><select id="pxm"><option value="auto">Otomatis (coba semua)</option>${E.PROXIES.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select>
@@ -877,11 +1002,20 @@ async function rSumber(){
   $('#nf').onsubmit=async e=>{e.preventDefault(); $('#nr').innerHTML='memuat…'; $('#nr').innerHTML=newsList(await api('/api/news?q='+encodeURIComponent($('#nq').value)))};
   $('#nf').requestSubmit();
   const cfg=E.LS.get('proxycfg',{mode:'auto',custom:''}); $('#pxm').value=cfg.mode; $('#pxc').value=cfg.custom||''; $('#sya').value=E.LS.get('syariahlist','');
-  $('#pxs').onclick=()=>{E.LS.set('proxycfg',{mode:$('#pxm').value,custom:$('#pxc').value.trim()}); E.clearCache(); OV=SNAP=null; $('#pxr').textContent='Tersimpan. Tekan Refresh untuk memuat ulang data.'};
-  $('#pxt').onclick=async()=>{$('#pxr').textContent='Menguji…'; E.LS.set('proxycfg',{mode:$('#pxm').value,custom:$('#pxc').value.trim()}); E.clearCache();
+  $('#pxs').onclick=()=>{E.LS.set('proxycfg',{mode:$('#pxm').value,custom:$('#pxc').value.trim()}); E.resetMem(); OV=SNAP=null; $('#pxr').textContent='Tersimpan. Tekan Refresh untuk memuat ulang data.'};
+  $('#pxt').onclick=async()=>{$('#pxr').textContent='Menguji…'; E.LS.set('proxycfg',{mode:$('#pxm').value,custom:$('#pxc').value.trim()}); E.resetMem();
     try{const o=await E.overview(true); $('#pxr').innerHTML=(o.ihsg?'✓ Yahoo Finance OK':'✗ Yahoo gagal')+' · '+(o.source=='TradingView'?'✓ TradingView OK':'✗ TradingView gagal')+' · '+Object.entries(E.STATUS).map(([k,v])=>k+': '+(v.via||v.err||'')).join(' | ')}catch(e){$('#pxr').textContent='Gagal: '+e.message}};
   $('#pxf').onclick=async()=>{$('#pxr').textContent='Mengukur kecepatan semua jalur…'; const r=await E.speedTest();
     $('#pxr').innerHTML='<table>'+r.map((x,i)=>`<tr><td>${i==0&&x.ms!=null?'🏆 ':''}${esc(x.name)}</td><td class="n">${x.ms!=null?x.ms+' ms':'<span class="down">gagal</span>'}</td></tr>`).join('')+'</table>'+(r[0]&&r[0].ms!=null?'Jalur tercepat otomatis dipakai.':'Tidak ada jalur yang berhasil — periksa internet atau isi proxy kustom.')};
+  const wsrc=$('#wsrc').value; $('#wpre').textContent=wsrc;
+  const cur=(E.LS.get('proxycfg',{}).custom||''); $('#wurl').value=cur.replace(/\/?\?url=$/,'');
+  $('#wcp').onclick=async()=>{try{await navigator.clipboard.writeText(wsrc);$('#wres').textContent='Kode disalin — tempel di editor Cloudflare.'}catch(e){const t=$('#wpre');getSelection().selectAllChildren(t);$('#wres').textContent='Tekan Ctrl+C untuk menyalin kode yang sudah diblok.'}};
+  $('#wsv').onclick=async()=>{let u=$('#wurl').value.trim(); if(!/^https:\/\//.test(u)){$('#wres').textContent='Alamat harus diawali https://';return}
+    u=u.replace(/\/?(\?url=)?$/,'')+'/?url='; const cfg=E.LS.get('proxycfg',{mode:'auto',custom:''}); cfg.custom=u; E.LS.set('proxycfg',cfg); $('#pxc').value=u; E.resetMem();
+    $('#wres').textContent='Menguji proxy pribadi…'; try{const o=await E.overview(true); const st=E.STATUS;
+      $('#wres').innerHTML=(o.source==='TradingView'?'✅ TradingView OK':'❌ TradingView gagal')+' · '+(o.ihsg?'✅ Yahoo OK':'❌ Yahoo gagal')+' · '+(st['Google News']&&st['Google News'].ok?'✅ Berita OK':'Berita: -')+(o.source==='TradingView'&&o.ihsg?' — proxy pribadi aktif, tekan Refresh.':' — periksa alamat & kode worker.'); OV=SNAP=null}
+    catch(e){$('#wres').textContent='Gagal: '+e.message}};
+  $('#wrm').onclick=()=>{const cfg=E.LS.get('proxycfg',{mode:'auto',custom:''}); cfg.custom=''; E.LS.set('proxycfg',cfg); $('#wurl').value=''; $('#pxc').value=''; $('#wres').textContent='Proxy pribadi dihapus; kembali memakai proxy publik.'};
   $('#bex').onclick=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(E.portLoad(),null,1)],{type:'application/json'})); a.download='portofolio-saham.json'; a.click()};
   $('#bim').onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text()); if(!Array.isArray(j.positions))throw 0; E.portSave(j); PORT=null; $('#syr').textContent='Portofolio diimpor.'}catch(er){$('#syr').textContent='File tidak valid.'}};
   $('#bcc').onclick=()=>{E.clearCache(); OV=SNAP=PORT=null; $('#syr').textContent='Cache dihapus.'};
@@ -890,9 +1024,11 @@ async function rSumber(){
 }
 
 /* ---------------- Refresh ---------------- */
-async function refreshAll(){ const b=$('#rb'), t0=performance.now(); b.disabled=true; b.textContent='⟳ Memuat…';
-  try{ OV=null; SNAP=null; PORT=null; for(const k in NEWS) delete NEWS[k]; await render(CUR,true);
-    if(CUR!='pasar') api('/api/overview?force=1').then(o=>OV=o).catch(()=>{}); } finally{ b.disabled=false; b.textContent='⟳ Refresh'; $('#upd').textContent+=` (${((performance.now()-t0)/1000).toFixed(1)} dtk)`; schedule()} }
+let BUSY=false;
+async function refreshAll(){ if(BUSY)return; BUSY=true; const b=$('#rb'), t0=performance.now(); b.disabled=true; b.textContent='⟳ Memuat…';
+  try{ for(const k in NEWS) delete NEWS[k]; if(!['pasar','cepat','rek','harian','goreng','fund','porto','detail'].includes(CUR)){OV=SNAP=PORT=null} await render(CUR,true); if(CUR!='porto')PORT=null;
+    if(!['cepat','rek','harian','goreng','fund'].includes(CUR)) api('/api/snapshot?force=1').then(x=>{SNAP=x;freshBadge()}).catch(()=>{});
+    if(CUR!='pasar') api('/api/overview?force=1').then(o=>OV=o).catch(()=>{}); } finally{ BUSY=false; b.disabled=false; b.textContent='⟳ Refresh'; $('#upd').textContent+=` (${((performance.now()-t0)/1000).toFixed(1)} dtk)`; schedule()} }
 $('#rb').onclick=refreshAll;
 function schedule(){ clearInterval(timer); const m=+$('#ri').value; try{localStorage.setItem('ri',m)}catch(e){}
   if(!m){$('#cd').textContent='';return} nextAt=Date.now()+m*60000;

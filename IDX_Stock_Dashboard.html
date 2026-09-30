@@ -138,7 +138,7 @@ tr:hover td{background:var(--panel2)}
           <select id="ival"><option value="0">Off</option><option value="5">5 menit</option><option value="10">10 menit</option><option value="15">15 menit</option></select>
         </label>
         <button class="btn" id="rbtn">⟳ Refresh</button>
-        <span class="status" id="st">—</span>
+        <span id="net" style="width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block" title=""></span><span class="status" id="st">—</span>
         <button class="btn sm" id="setbtn" title="Pengaturan">⚙</button>
         <button class="btn sm" id="thbtn" title="Tema terang/gelap">◐</button>
         <button class="btn sm" id="logout">Keluar</button>
@@ -250,21 +250,50 @@ function sha256(ascii){const rr=(v,a)=>(v>>>a)|(v<<(32-a));const mp=Math.pow,max
 // ======================================================================
 // DATA FETCH (TradingView screener — CORS terbuka, jalan dari file://)
 // ======================================================================
-async function scan(body,timeout=25000){
-  const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),timeout);
-  try{const r=await fetch(SCAN_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(body),signal:ctl.signal,cache:'no-store'});
-    if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(to)}}
+const SCAN_URLS=[SCAN_URL,'https://scanner.tradingview.com/global/scan'];
+const STATIC_COLS=['description','sector','industry','typespecs','is_shariah_compliant'];
+const FUND_COLS=['name',...STATIC_COLS,...COLS.slice(COLS.indexOf('total_revenue'))];
+const FAST_COLS=COLS.filter(c=>!FUND_COLS.includes(c)||c==='name');
+const FUND_TTL=12*3600e3;
+const NET={ms:null,ok:null,tries:0,src:'',last:0,fundTs:0};
+let inflight=null;
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+// satu request dengan timeout; body disesuaikan untuk endpoint cadangan (global)
+async function scanOnce(url,body,timeout,outer){
+  const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),timeout);const kill=()=>ctl.abort();if(outer)outer.addEventListener('abort',kill);
+  try{let b=body;if(url.includes('/global/')){b=JSON.parse(JSON.stringify(body));if(!b.symbols)b.filter=[{left:'exchange',operation:'equal',right:'IDX'},...(b.filter||[])]}
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(b),signal:ctl.signal,cache:'no-store',priority:'high',credentials:'omit'});
+    if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();if(!j||!Array.isArray(j.data))throw new Error('respon tidak valid');return j}
+  finally{clearTimeout(to);if(outer)outer.removeEventListener('abort',kill)}}
+// retry otomatis + endpoint cadangan + backoff
+async function scan(body,opt={}){const tries=opt.tries||3,outer=opt.signal;let err;
+  for(let k=0;k<tries;k++){for(const url of SCAN_URLS){if(outer&&outer.aborted)throw new Error('dibatalkan');
+      try{const t0=performance.now();const j=await scanOnce(url,body,opt.timeout||(k?20000:12000),outer);if(body.range){NET.ms=Math.round(performance.now()-t0);NET.src=url.includes('/global/')?'cadangan':'utama';NET.tries=k}return j}
+      catch(e){err=e;if(outer&&outer.aborted)throw e}}
+    if(k<tries-1){NET.tries=k+1;setNetBadge('retry');await sleep(700*(k+1))}}
+  throw err||new Error('gagal')}
 function toObj(item,cols){const o={s:item.s};cols.forEach((c,i)=>o[c]=item.d[i]);return o}
-async function fetchAll(){
-  const [st,ix]=await Promise.all([
-    scan({filter:[{left:'type',operation:'equal',right:'stock'}],columns:COLS,sort:{sortBy:'market_cap_basic',sortOrder:'desc'},range:[0,1500]}),
-    scan({symbols:{tickers:['IDX:COMPOSITE','IDX:LQ45','IDX:IDX30']},columns:['close','change','Perf.W','Perf.1M','Perf.3M','Perf.6M','Perf.Y','Perf.YTD','close[1]','SMA50','SMA200','high','low']}).catch(()=>null)
-  ]);
-  let fx=null;try{const r=await fetch('https://scanner.tradingview.com/forex/scan',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({symbols:{tickers:['FX_IDC:USDIDR']},columns:['close','change']})});const j=await r.json();fx=j.data[0].d}catch(e){}
-  return {ts:Date.now(),stocks:st.data.map(x=>toObj(x,COLS)),index:ix?ix.data.map(x=>toObj(x,['close','change','Perf.W','Perf.1M','Perf.3M','Perf.6M','Perf.Y','Perf.YTD','close[1]','SMA50','SMA200','high','low'])):[],fx};
+const IDX_COLS=['close','change','Perf.W','Perf.1M','Perf.3M','Perf.6M','Perf.Y','Perf.YTD','close[1]','SMA50','SMA200','high','low'];
+async function fetchFund(signal){const j=await scan({filter:[{left:'type',operation:'equal',right:'stock'}],columns:FUND_COLS,range:[0,1500]},{signal,timeout:20000});
+  const map={};j.data.forEach(x=>{map[x.s]=x.d});const f={ts:Date.now(),cols:FUND_COLS,map};LS.set('idx_fund',f);NET.fundTs=f.ts;return f}
+async function fetchAll(opts={}){
+  const ctl=new AbortController();inflight=ctl;const signal=ctl.signal;
+  let fund=LS.get('idx_fund',null);if(fund&&fund.cols&&fund.cols.join()!==FUND_COLS.join())fund=null;
+  const needFund=opts.forceFund||!fund||Date.now()-fund.ts>FUND_TTL;
+  const [st,ix,fx,fnew]=await Promise.all([
+    scan({filter:[{left:'type',operation:'equal',right:'stock'}],columns:FAST_COLS,range:[0,1500]},{signal}),
+    scan({symbols:{tickers:['IDX:COMPOSITE','IDX:LQ45','IDX:IDX30']},columns:IDX_COLS},{signal,tries:2}).catch(()=>null),
+    fetch('https://scanner.tradingview.com/forex/scan',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({symbols:{tickers:['FX_IDC:USDIDR']},columns:['close','change']}),signal}).then(r=>r.json()).then(j=>j.data[0].d).catch(()=>null),
+    needFund?fetchFund(signal).catch(e=>{console.warn('fund',e);return null}):Promise.resolve(null)]);
+  if(fnew)fund=fnew;NET.fundTs=fund?fund.ts:0;
+  const fast={ts:Date.now(),cols:FAST_COLS,rows:st.data.map(x=>[x.s,x.d]),index:ix?ix.data.map(x=>toObj(x,IDX_COLS)):(SNAP&&SNAP.index)||[],fx:fx||(SNAP&&SNAP.fx)||null};
+  return {fast,fund};
 }
+// gabungkan harga (cepat) + fundamental (cache 12 jam)
+function mergeSnap(fast,fund){const stocks=fast.rows.map(([s,d])=>{const o={s};fast.cols.forEach((c,i)=>o[c]=d[i]);const fd=fund&&fund.map[s];if(fd)fund.cols.forEach((c,i)=>{if(c!=='name')o[c]=fd[i]});return o});
+  return {ts:fast.ts,stocks,index:fast.index,fx:fast.fx,fundTs:fund?fund.ts:0}}
 async function fetchOne(code){
-  const j=await scan({symbols:{tickers:['IDX:'+code]},columns:COLS});
+  const j=await scan({symbols:{tickers:['IDX:'+code]},columns:COLS},{tries:2});
   return j.data&&j.data.length?toObj(j.data[0],COLS):null;
 }
 // Berita: RSS -> JSON via rss2json (CORS terbuka)
@@ -550,39 +579,55 @@ $('#lform').onsubmit=e=>{e.preventDefault();const u=$('#lu').value.trim(),p=$('#
 $('#logout').onclick=()=>{try{sessionStorage.removeItem('idx_auth')}catch(e){}LS.set('idx_remember',false);showLogin()};
 
 async function start(){
+  try{localStorage.removeItem('idx_snap')}catch(e){}   // cache format lama
   $('#login').classList.add('hidden');$('#app').classList.remove('hidden');
   const iv=String(LS.get('idx_ival','0'));$('#ival').value=iv;tab=LS.get('idx_tab','cek');setTab(tab);
-  // tampilkan cache terakhir dulu (bila ada) supaya langsung terlihat
-  const cached=LS.get('idx_snap',null);if(cached&&cached.stocks){SNAP=cached;try{D=analyze(SNAP);$('#boot').classList.add('hidden');renderAll();setOffline(`Menampilkan data tersimpan ${new Date(SNAP.ts).toLocaleString('id-ID')} — memperbarui…`)}catch(e){console.error(e)}}
+  // tampilkan cache terakhir dulu (instan), lalu perbarui di latar belakang
+  const fast=LS.get('idx_fast',null),fund=LS.get('idx_fund',null);
+  if(fast&&fast.rows){try{SNAP=mergeSnap(fast,fund);D=analyze(SNAP);$('#boot').classList.add('hidden');renderAll();setOffline(`Menampilkan data tersimpan ${new Date(SNAP.ts).toLocaleString('id-ID')} — memperbarui…`)}catch(e){console.error(e)}}
   await refresh();setAuto(+iv);
 }
 function setOffline(msg){const b=$('#offline');if(msg){b.textContent=msg;b.classList.remove('hidden')}else b.classList.add('hidden')}
-async function refresh(){
-  if(loading)return;loading=true;const b=$('#rbtn');b.disabled=true;b.innerHTML='<span class="spin"></span> Memuat…';
-  try{const snap=await fetchAll();if(!snap.stocks.length)throw new Error('data kosong');SNAP=snap;LS.set('idx_snap',snap);D=analyze(SNAP);$('#boot').classList.add('hidden');setOffline(null);renderAll()}
-  catch(e){console.error(e);const msg='Gagal mengambil data pasar ('+(e.message||e)+'). Periksa koneksi internet / blokir jaringan kantor lalu klik Refresh.';
+function setNetBadge(state){const el=$('#net');if(!el)return;const m={ok:['var(--up)',`Terhubung · ${NET.ms!=null?(NET.ms/1000).toFixed(1).replace('.',',')+' dtk':''}${NET.src==='cadangan'?' · server cadangan':''}`],retry:['var(--warn)',`Mencoba ulang (${NET.tries})…`],load:['var(--blue)','Memuat…'],err:['var(--down)','Gagal terhubung'],off:['var(--down)','Offline']}[state]||['var(--muted)',''];
+  el.style.background=m[0];el.title=m[1]+(NET.fundTs?` · fundamental ${new Date(NET.fundTs).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}`:'')}
+async function refresh(opts={}){
+  if(loading){if(!opts.force)return;try{inflight&&inflight.abort()}catch(e){}}
+  if(navigator.onLine===false){setNetBadge('off');setOffline('Tidak ada koneksi internet — data akan diperbarui otomatis saat koneksi kembali.'+(SNAP?` Data yang tampil: ${new Date(SNAP.ts).toLocaleString('id-ID')}.`:''));return}
+  loading=true;const b=$('#rbtn');b.disabled=true;b.innerHTML='<span class="spin"></span> Memuat…';setNetBadge('load');const t0=performance.now();
+  try{const {fast,fund}=await fetchAll(opts);if(!fast.rows.length)throw new Error('data kosong');
+    SNAP=mergeSnap(fast,fund);D=analyze(SNAP);$('#boot').classList.add('hidden');setOffline(null);renderAll();NET.ok=true;NET.last=Date.now();NET.total=Math.round(performance.now()-t0);setNetBadge('ok');
+    setTimeout(()=>LS.set('idx_fast',fast),0);
+    if(!fund)setOffline('Data harga terbaru berhasil dimuat, tetapi data fundamental belum tersedia — klik Refresh lagi sebentar lagi.')}
+  catch(e){console.error(e);NET.ok=false;setNetBadge('err');if(String(e.message).includes('dibatalkan'))return;
+    const msg='Gagal mengambil data pasar setelah 3x percobaan ('+(e.message||e)+'). Periksa koneksi internet / blokir jaringan kantor lalu klik Refresh.';
     if(D)setOffline(msg+` Data yang tampil: ${new Date(SNAP.ts).toLocaleString('id-ID')}.`);else $('#boot').innerHTML=esc(msg)+' <button class="btn sm" onclick="refresh()">Coba lagi</button>'}
-  finally{loading=false;b.disabled=false;b.textContent='⟳ Refresh';if(timer)nextAt=Date.now()+(+$('#ival').value)*60000;updStatus()}
+  finally{loading=false;inflight=null;b.disabled=false;b.textContent='⟳ Refresh';if(timer)nextAt=Date.now()+(+$('#ival').value)*60000;updStatus()}
 }
 function updStatus(){if(!D){return}const t=new Date(D.generated).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  let s=`Update ${t} · ${D.all.length} saham · ${D.phase.lab}`;if(timer&&nextAt){const r=Math.max(0,nextAt-Date.now());s+=` · berikutnya ${Math.floor(r/60000)}:${String(Math.floor(r%60000/1000)).padStart(2,'0')}`}$('#st').textContent=s}
-function setAuto(m){clearInterval(timer);clearInterval(cdT);timer=null;nextAt=0;if(m>0){timer=setInterval(refresh,m*60000);nextAt=Date.now()+m*60000;cdT=setInterval(updStatus,1000)}updStatus()}
-$('#rbtn').onclick=refresh;
+  let s=`Update ${t}${NET.total?` (${(NET.total/1000).toFixed(1).replace('.',',')} dtk)`:''} · ${D.all.length} saham · ${D.phase.lab}`;if(timer&&nextAt){const r=Math.max(0,nextAt-Date.now());s+=` · berikutnya ${Math.floor(r/60000)}:${String(Math.floor(r%60000/1000)).padStart(2,'0')}`}$('#st').textContent=s}
+// auto refresh: jeda saat tab tidak dilihat, langsung perbarui saat kembali bila sudah lewat jadwal
+function autoTick(){if(!timer)return;if(Date.now()>=nextAt){if(document.hidden){return}refresh()}updStatus()}
+function setAuto(m){clearInterval(timer);timer=null;nextAt=0;if(m>0){nextAt=Date.now()+m*60000;timer=setInterval(autoTick,1000)}updStatus()}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&timer&&Date.now()>=nextAt)refresh()});
+window.addEventListener('online',()=>{setOffline('Koneksi kembali — memperbarui data…');refresh({force:true})});
+window.addEventListener('offline',()=>{setNetBadge('off');setOffline('Koneksi internet terputus — menampilkan data terakhir.')});
+$('#rbtn').onclick=()=>refresh({force:true});
 $('#ival').onchange=e=>{setAuto(+e.target.value);LS.set('idx_ival',e.target.value);toast(+e.target.value?`Auto refresh tiap ${e.target.value} menit aktif`:'Auto refresh dimatikan')};
 $('#nav').onclick=e=>{const b=e.target.closest('button');if(b)setTab(b.dataset.t)};
 function setTab(t){tab=t;$$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));$$('.tab').forEach(s=>s.classList.toggle('hidden',s.id!=='t-'+t||(!D&&t!=='pf')));LS.set('idx_tab',t);
-  if(t==='pf')renderPF();if(t==='news'&&D)renderNews();}
+  if(t==='pf'||t==='news'||DIRTY.has(t))renderTab(t);}
 $('#sform').onsubmit=e=>{e.preventDefault();const q=$('#sq').value.trim().toUpperCase().replace(/\.JK$/,'').replace(/^IDX:/,'');if(q){openStock(q);$('#sq').blur()}};
 document.addEventListener('click',e=>{const t=e.target.closest('[data-tk]');if(t){openStock(t.dataset.tk)}});
 $('#ov').onclick=e=>{if(e.target.id==='ov')closeModal()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 function closeModal(){$('#ov').classList.add('hidden');['detail','dfin'].forEach(k=>{if(charts[k]){charts[k].destroy();delete charts[k]}})}
+const RENDER={cek:()=>renderCek(),pasar:()=>renderPasar(),rek:()=>renderRek(),scr:()=>renderScr(),trd:()=>renderTrd(),cross:()=>renderCross(),gor:()=>renderGor(),pf:()=>renderPF(),news:()=>renderNews()};
+const DIRTY=new Set();
+function renderTab(t){if(!D&&t!=='pf')return;try{RENDER[t]&&RENDER[t]()}catch(e){console.error(t,e)}DIRTY.delete(t);enableSort($('#t-'+t))}
 function renderAll(){
   $$('.tab').forEach(s=>s.classList.toggle('hidden',s.id!=='t-'+tab));
-  const safe=f=>{try{f()}catch(e){console.error(f.name,e)}};
-  [renderCek,renderPasar,renderRek,renderScr,renderTrd,renderCross,renderGor].forEach(safe);
-  if(tab==='pf')safe(renderPF);if(tab==='news')safe(renderNews);
-  enableSort();$('#tklist').innerHTML=D.all.map(r=>`<option value="${esc(r.ticker)}">${esc(r.name||'')}</option>`).join('');updStatus();
+  Object.keys(RENDER).forEach(k=>DIRTY.add(k));DIRTY.delete('news');renderTab(tab);   // hanya tab aktif; tab lain dirender saat dibuka
+  const dl=$('#tklist');if(!dl.dataset.n||+dl.dataset.n!==D.all.length){dl.innerHTML=D.all.map(r=>`<option value="${esc(r.ticker)}">${esc(r.name||'')}</option>`).join('');dl.dataset.n=D.all.length}updStatus();
 }
 
 // ---------- PASAR ----------
@@ -673,7 +718,7 @@ function drawScr(){
   <td>${ck(c.der)} ${fm.der==null?'':nf(fm.der,2)}</td><td>${ck(c.cash)} ${fm.cash_months==null?'':nf(fm.cash_months,1)}</td>
   <td>${ck(c.re)} ${fm.ni_years?fm.ni_pos_years+'/'+fm.ni_years:''}</td><td>${ck(c.cfo)} ${big(fm.cfo)}</td><td>${ck(c.fcf)} ${big(fm.fcf)}</td>
   <td>${roeb(fm.roe)}</td><td>${valb(r.per,r.per_label)}</td><td>${valb(r.pbv,r.pbv_label)}</td><td>${fsb(r.fund_score)} <span class="mut">${r.passed}/${r.avail}</span></td><td>${syb(r.syariah)}</td></tr>`}).join('');
-  paginate($('#scr-t'),true);
+  paginate($('#scr-t'),false);
   $$('#scr-t th.s').forEach(th=>th.onclick=()=>{const k=th.dataset.k;scrSort={k,d:scrSort.k===k?-scrSort.d:-1};drawScr()});
 }
 
@@ -775,8 +820,9 @@ $('#setbtn').onclick=()=>{$('#modal').className='modal small';
    <label>Min. nilai – day trade (Rp)<input name="minValDT" type="number" value="${CFG.minValDT}"></label>
    <label>Min. nilai – scalping (Rp)<input name="minValScalp" type="number" value="${CFG.minValScalp}"></label>
    <label class="status" style="flex-direction:row;gap:6px"><input type="checkbox" name="remember" ${LS.get('idx_remember',false)?'checked':''} style="width:auto"> Tetap login di browser ini</label>
-   <div class="pill"><button class="btn pri">Simpan</button><button class="btn" type="button" id="cfg-def">Default</button></div></form>`;
+   <div class="pill"><button class="btn pri">Simpan</button><button class="btn" type="button" id="cfg-def">Default</button><button class="btn" type="button" id="cfg-fund">Muat ulang fundamental</button></div><div class="note">Harga & teknikal diambil tiap refresh (±0,6 MB); laporan keuangan di-cache 12 jam (±1 MB) supaya refresh cepat.</div></form>`;
   $('#ov').classList.remove('hidden');$$('#modal [data-close]').forEach(b=>b.onclick=closeModal);
+  $('#cfg-fund').onclick=()=>{closeModal();refresh({force:true,forceFund:true});toast('Memuat ulang data fundamental…')};
   $('#cfg-def').onclick=()=>{CFG=Object.assign({},DEF_CFG);LS.set('idx_cfg',CFG);closeModal();if(SNAP){D=analyze(SNAP);renderAll()}};
   $('#cfgf').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));Object.keys(DEF_CFG).forEach(k=>{if(f[k]!==undefined&&f[k]!=='')CFG[k]=+f[k]});LS.set('idx_cfg',CFG);LS.set('idx_remember',!!f.remember);closeModal();if(SNAP){D=analyze(SNAP);renderAll()}toast('Pengaturan disimpan')};
 };
@@ -797,9 +843,9 @@ function sortTable(tb,col,dir){const rows=[...tb.rows];const hi=rows.findIndex(r
     if(typeof va==='number'&&typeof vb==='number')return (va-vb)*dir;return String(va).localeCompare(String(vb),'id',{numeric:true})*dir});
   body.forEach(r=>parent.appendChild(r));
   [...rows[hi].cells].forEach((th,i)=>{th.classList.remove('asc','desc');if(i===col)th.classList.add(dir>0?'asc':'desc')})}
-const PAGE=10;
+const PAGE=10,PAGES={};
 function paginate(tb,reset){if(!tb)return;const rows=[...tb.rows].filter(r=>r.cells.length>1&&!r.querySelector('th'));const n=rows.length,pages=Math.max(1,Math.ceil(n/PAGE));
-  let pg=reset?1:(+tb.dataset.page||1);pg=clip(pg,1,pages);tb.dataset.page=pg;rows.forEach((r,i)=>r.style.display=(i>=(pg-1)*PAGE&&i<pg*PAGE)?'':'none');
+  const pk=tableKey(tb);let pg=reset?1:(+tb.dataset.page||PAGES[pk]||1);pg=clip(pg,1,pages);tb.dataset.page=pg;PAGES[pk]=pg;rows.forEach((r,i)=>r.style.display=(i>=(pg-1)*PAGE&&i<pg*PAGE)?'':'none');
   const host=tb.closest('.tw')||tb;let pager=host.nextElementSibling&&host.nextElementSibling.classList.contains('pager')?host.nextElementSibling:null;
   if(n<=PAGE){if(pager)pager.remove();return}
   if(!pager){pager=document.createElement('div');pager.className='pager';host.after(pager)}
@@ -809,7 +855,7 @@ function paginate(tb,reset){if(!tb)return;const rows=[...tb.rows].filter(r=>r.ce
   pager.querySelectorAll('[data-pg]').forEach(b=>b.onclick=()=>{tb.dataset.page=b.dataset.pg;paginate(tb)})}
 function enableSort(root=document){root.querySelectorAll('table').forEach(tb=>{if(tb.id==='scr-t'){paginate(tb,false);return}const hr=[...tb.rows].find(r=>r.querySelector('th'));if(!hr)return;
   [...hr.cells].forEach(th=>{if(!th.classList.contains('gs')){th.classList.add('gs');th.title='Klik untuk mengurutkan'}});
-  const k=tableKey(tb),st=SORTS[k];if(st&&st.col<hr.cells.length)sortTable(tb,st.col,st.dir);paginate(tb,true)})}
+  const k=tableKey(tb),st=SORTS[k];if(st&&st.col<hr.cells.length)sortTable(tb,st.col,st.dir);paginate(tb,false)})}
 document.addEventListener('click',e=>{const th=e.target.closest('th.gs');if(!th)return;const tb=th.closest('table');const col=th.cellIndex;const k=tableKey(tb);
   const cur=SORTS[k];const dir=cur&&cur.col===col?-cur.dir:(typeof cellVal([...tb.rows].find(r=>r.cells.length>1&&!r.querySelector('th'))?.cells[col])==='number'?-1:1);
   SORTS[k]={col,dir};LS.set('idx_sorts',SORTS);sortTable(tb,col,dir);paginate(tb,true)});

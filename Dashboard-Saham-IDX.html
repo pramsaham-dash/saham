@@ -52,7 +52,7 @@ main th{cursor:pointer;user-select:none}main th:hover{color:var(--ink)}main th:e
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .note{font-size:12px;color:var(--mut);margin:8px 0 0}
 .adv{white-space:normal;min-width:260px;font-size:12px}
-.chk{font-weight:700}.pill{display:flex;gap:6px;flex-wrap:wrap}
+.chk{font-weight:700}.qbest{border-left:5px solid var(--acc);background:var(--chip);border-radius:10px;padding:12px 14px;margin:10px 0;font-size:15px;line-height:1.6}.qbest.none{border-color:var(--amb)}.qgrid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}.qt{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.7}.qt.good{border-color:var(--up)}.qt b.h{font-size:14px}.chip{background:var(--chip);color:var(--ink);font-weight:600;border-radius:14px;padding:4px 11px;font-size:12px}.chip.on{background:var(--acc);color:#fff}.pill{display:flex;gap:6px;flex-wrap:wrap}
 dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);max-width:380px;width:92%}
 dialog::backdrop{background:#0006}
 .err{color:var(--down);font-size:13px}
@@ -78,12 +78,12 @@ dialog::backdrop{background:#0006}
   <button class="ghost sm" id="lo" style="margin-left:auto">Keluar</button>
 </header>
 <nav id="nav">
-  <button data-t="pasar" class="on">Pasar</button><button data-t="rek">Rekomendasi</button><button data-t="harian">Trading Harian & Scalping</button>
+  <button data-t="pasar" class="on">Pasar</button><button data-t="cepat">⚡ Cek Cepat</button><button data-t="rek">Rekomendasi</button><button data-t="harian">Trading Harian & Scalping</button>
   <button data-t="goreng">Saham Gorengan</button><button data-t="fund">Screener Fundamental</button><button data-t="detail">Detail Saham</button>
   <button data-t="porto">Portofolio</button><button data-t="sumber">Sumber & Berita</button>
 </nav>
 <main>
-  <section id="t-pasar"></section><section id="t-rek" class="hide"></section><section id="t-harian" class="hide"></section>
+  <section id="t-pasar"></section><section id="t-cepat" class="hide"></section><section id="t-rek" class="hide"></section><section id="t-harian" class="hide"></section>
   <section id="t-goreng" class="hide"></section><section id="t-fund" class="hide"></section><section id="t-detail" class="hide"></section>
   <section id="t-porto" class="hide"></section><section id="t-sumber" class="hide"></section>
   <p class="note">⚠️ Analisis otomatis untuk edukasi, bukan ajakan jual/beli. Data diambil langsung dari TradingView, Yahoo Finance & Google News oleh browser Anda (bisa tertunda ±10–15 menit). Portofolio tersimpan di browser ini. Status halal adalah indikasi; verifikasi dengan Daftar Efek Syariah OJK / ISSI.</p>
@@ -357,7 +357,7 @@ function plan(tk,h){
   let sl=Math.max(p-k[1]*a,p*{'3h':.95,'1m':.93,'2m':.9,'3b':.85,'lt':.8}[h]);
   if(tk.ma20&&(h==='2m'||h==='1m')&&tk.ma20<p)sl=Math.min(sl,tk.ma20-tick(p));
   if((h==='3b'||h==='lt')&&tk.ma50&&tk.ma50<p)sl=Math.min(sl,tk.ma50*.97);
-  let lo=(h==='3h'||h==='1m')?Math.max(p-.5*a,tk.ma5||0):p-.8*a; lo=Math.min(lo,p-2*tick(p));
+  let lo=(h==='3h'||h==='1m')?Math.max(p-.5*a,tk.ma5||0):p-.8*a; lo=Math.max(Math.min(lo,p-2*tick(p)),p*.85);
   return {entry:`${rp(lo,'down')} - ${rp(p)}`,target:rp(tgt,'up'),stop:rp(sl,'down'),gain_pct:(tgt/p-1)*100,risk_pct:(1-sl/p)*100};
 }
 function scoreH(tk,fe){
@@ -425,6 +425,28 @@ function gorengan(U){const out=[];
     if(moves&&sc>=30)out.push({ticker:t,name:d.description,price:p,chg:ch,rvol:rv,perf_w:pw,perf_m:pm,mcap:mc,per,pbv,value:val,flags:f,score:Math.round(sc),halal:halal(t,d,d.debt_to_equity),level:sc>=60?'Tinggi':'Sedang'})}
   return out.sort((a,b)=>b.score-a.score).slice(0,20)}
 
+/* ---------- Cek Cepat: vonis sederhana per horizon ---------- */
+const BLN=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+function tradeDate(n){const d=wib();let k=0;while(k<n){d.setUTCDate(d.getUTCDate()+1);const w=d.getUTCDay();if(w>0&&w<6)k++}return `${p2(d.getUTCDate())} ${BLN[d.getUTCMonth()]} ${d.getUTCFullYear()}`}
+const HZ=[['scalp','Scalping','Hari ini saja (intraday)',0],['3h','3 Hari','3 hari bursa',3],['1m','1 Minggu','5 hari bursa (±1 minggu)',5],
+  ['2m','2 Minggu','10 hari bursa (±2 minggu)',10],['3b','3 Bulan','±60 hari bursa (±3 bulan)',60],['lt','1 Tahun+','minimal 1 tahun, evaluasi tiap laporan kuartal',250]];
+const THR={'3h':[35,15],'1m':[30,12],'2m':[35,15],'3b':[50,30],'lt':[60,45]};
+function verdict(tk,sc,plans,hasFund){
+  const items=HZ.map(([h,name,hold,n])=>{
+    if(h==='scalp'){const pv=tk.pivot,mid=(pv.S1+pv.P)/2,rg=s(tk.avg_range),val=s(tk.value_avg);
+      const tgt=rp(pv.P>mid*1.008?pv.P:pv.R1,'up'),lv=val>=2e10&&rg>=3&&s(tk.rvol,1)>=.8?'good':val>=1e10&&rg>=2?'mid':'bad';
+      return{h,name,level:lv,ratio:lv==='good'?1+rg/20:lv==='mid'?.6:0,buy:`${rp(pv.S1,'down')} - ${rp(mid)}`,target:tgt,stop:rp(pv.S1-2*tick(pv.S1),'down'),
+        gain:(tgt/rp(mid)-1)*100,hold,sellBy:'hari ini, sebelum 15:49 WIB'}}
+    const v=sc[h],t=THR[h];let lv=v>=t[0]?'good':v>=t[1]?'mid':'bad'; if(h==='lt'&&!hasFund&&lv==='good')lv='mid';
+    return{h,name,level:lv,ratio:v/t[0],buy:plans[h].entry,target:plans[h].target,stop:plans[h].stop,gain:plans[h].gain_pct,hold,sellBy:tradeDate(n)}});
+  const pick=l=>items.filter(x=>x.level===l).sort((a,b)=>b.ratio-a.ratio)[0];
+  const best=pick('good')||pick('mid')||null;
+  const bits=['Tren '+tk.trend]; if(tk.rsi!=null)bits.push('RSI '+Math.round(tk.rsi)+(tk.rsi>70?' (jenuh beli)':tk.rsi<30?' (jenuh jual)':''));
+  const c=tk.cross_50_200; if(c&&c.days_ago<=20)bits.push((c.type==='golden'?'Golden':'Death')+' Cross '+c.days_ago+' hari lalu');
+  if(tk.rvol>1.5)bits.push('volume '+tk.rvol.toFixed(1)+'x rata-rata');
+  return{items,best:best?{...best,strong:best.level==='good'}:null,why:bits.join(' · ')};
+}
+function planAll(tk){const o={};for(const h of['3h','1m','2m','3b','lt'])o[h]=plan(tk,h);return o}
 async function buildSnapshot(force,full){
   PROG('Mengambil harga terkini (TradingView)…');
   const [U,src]=await getUniverse(force), med=U?industryMedians(U):{}; if(!U) full=true;
@@ -450,7 +472,8 @@ async function buildSnapshot(force,full){
       return{...baseItem(r),entry:`${rp(Math.max(pv.S1,e*.99),'down')} - ${rp(e)}`,target:rp(e*1.03,'up'),target2:rp(Math.max(pv.R1,e*1.045),'up'),stop:rp(e*.985,'down'),hit3:tk.hit3*100,atr_pct:tk.atr_pct}});
   const scalp=await scalping(rows,full);
   PROG('');
-  return{partial:!full&&(missB>0||missF>0),missing:missB+missF,updated:nowStr(),source:src,recs,daytrade:day,scalping:scalp,gorengan:U?gorengan(U):[],session:session(),
+  const quick=rows.map(r=>({...baseItem(r),v:verdict(r.tk,r.sc,planAll(r.tk),r.has_fund)}));
+  return{quick,partial:!full&&(missB>0||missF>0),missing:missB+missF,updated:nowStr(),source:src,recs,daytrade:day,scalping:scalp,gorengan:U?gorengan(U):[],session:session(),
     screener:rows.filter(r=>r.fe).map(screenRow).sort((a,b)=>b.score-a.score),universe_count:U?Object.keys(U).length:FALLBACK.length};
 }
 let ENRICH=null, ONUPD=()=>{};
@@ -529,7 +552,7 @@ function portAction(b){
 function clearCache(){for(const k in C)delete C[k];TVCOLS=null;try{Object.keys(localStorage).filter(k=>k.startsWith('fund:')||k.startsWith('bars:')||k==='tvcols'||k==='proxywork').forEach(k=>localStorage.removeItem(k))}catch(e){}for(const k in WORK)delete WORK[k]}
 
 async function universe(){const [U]=await getUniverse(false);return U}
-return{speedTest,universe,onUpdate:f=>ONUPD=f,isEnriching:()=>!!ENRICH,overview,snapshot,stock,portView,portAction,portLoad,portSave,news,STATUS,session,nowStr,PROXIES,LS,clearCache,setProg:f=>PROG=f,
+return{verdict,speedTest,universe,onUpdate:f=>ONUPD=f,isEnriching:()=>!!ENRICH,overview,snapshot,stock,portView,portAction,portLoad,portSave,news,STATUS,session,nowStr,PROXIES,LS,clearCache,setProg:f=>PROG=f,
   _t:{technicals,fundEval,plan,rp,tick,advice,halal}};
 })();
 
@@ -624,8 +647,8 @@ function loading(id,msg='Memuat data pasar terbaru…'){$('#t-'+id).innerHTML=`<
 async function render(t,force=false){
   try{
     if(t=='pasar'){ if(!OV||force){ if(!OV)loading('pasar'); OV=await api('/api/overview'+(force?'?force=1':''))} rPasar(); stamp(OV.updated)}
-    else if(['rek','harian','goreng','fund'].includes(t)){ if(!SNAP||force){ if(!SNAP)loading(t); SNAP=await api('/api/snapshot'+(force?'?force=1':''))}
-      ({rek:rRek,harian:rHarian,goreng:rGoreng,fund:rFund})[t](); stamp(SNAP.updated)}
+    else if(['cepat','rek','harian','goreng','fund'].includes(t)){ if(!SNAP||force){ if(!SNAP)loading(t); SNAP=await api('/api/snapshot'+(force?'?force=1':''))}
+      ({cepat:rCepat,rek:rRek,harian:rHarian,goreng:rGoreng,fund:rFund})[t](); stamp(SNAP.updated)}
     else if(t=='detail'){ if(DETAIL&&force) await openStock(DETAIL.ticker,true); else if(DETAIL) rDetail(); else $('#t-detail').innerHTML='<div class="card load">Ketik kode saham di kotak pencarian lalu tekan Enter / Search.</div>'}
     else if(t=='porto'){ if(!PORT||force){ if(!PORT)loading('porto','Memuat portofolio…'); PORT=await api('/api/portfolio'+(force?'?force=1':''))} rPorto(); stamp(PORT.updated)}
     else if(t=='sumber') rSumber();
@@ -650,6 +673,51 @@ function rPasar(){
   if(ih) lineChart($('#c-ihsg'),{t:ih.t,series:[{name:'IHSG',data:ih.c},{name:'MA20',data:ih.ma20,color:COLORS[1],w:1.5},{name:'MA50',data:ih.ma50,color:COLORS[2],w:1.5}],fmt:v=>f1(v,0)});
 }
 function newsList(n){if(!n||!n.length)return'<p class="mut">Belum ada berita.</p>';return '<ul class="news">'+n.map(x=>`<li><a href="${esc(x.link)}" target="_blank" rel="noopener">${esc(x.title)}</a><br><small>${esc(x.source)} · ${esc((x.date||'').slice(0,22))}</small></li>`).join('')+'</ul>'}
+
+/* ---------------- Cek Cepat ---------------- */
+let QC=null, QF='all';
+const LV={good:['g','Cocok'],mid:['y','Netral'],bad:['r','Hindari']};
+function qcCard(d){
+  const v=d.v, b=v.best;
+  const head=`<div class="row" style="justify-content:space-between"><div><span style="font-size:20px;font-weight:700">${d.ticker}</span> <span class="mut">${esc(d.name||'')}</span></div>
+    <div class="row"><span style="font-size:18px;font-weight:700">${f0(d.price)}</span>${pct(d.chg)}${halalB(d.halal)}</div></div><div class="note" style="margin-top:4px">${esc(v.why)}</div>`;
+  const box=b?`<div class="qbest">✅ <b>Paling cocok: ${b.name}</b>${b.strong?'':' <span class="b y">sinyal sedang</span>'}<br>
+      🟢 <b>Beli</b> di <b>${b.buy}</b> &nbsp; 🎯 <b>Jual</b> di <b>${f0(b.target)}</b> (potensi ${pct(b.gain,1)}) &nbsp; 🛑 <b>Cut loss</b> bila tembus <b>${f0(b.stop)}</b><br>
+      ⏱️ <b>Simpan:</b> ${esc(b.hold)} — jual paling lambat <b>${esc(b.sellBy)}</b>, atau lebih cepat bila target tercapai.</div>`
+    :`<div class="qbest none">⚠️ <b>Belum ada waktu masuk yang baik untuk semua horizon.</b> Sebaiknya tunggu / hindari dulu. Jika sudah punya, pantau stop loss di bawah.</div>`;
+  const tiles=v.items.map(x=>{const L=LV[x.level];return `<div class="qt ${x.level}"><div class="row" style="justify-content:space-between"><b class="h">${x.name}</b><span class="b ${L[0]}">${L[1]}</span></div>
+    Beli: <b>${x.buy}</b><br>Jual: <b class="up">${f0(x.target)}</b> <span class="mut">(${x.gain>=0?'+':''}${f1(x.gain,1)}%)</span><br>Stop: <b class="down">${f0(x.stop)}</b><br><span class="mut">Simpan ${esc(x.hold)}<br>Jual paling lambat: ${esc(x.sellBy)}</span></div>`}).join('');
+  return head+box+`<div class="qgrid">${tiles}</div><div class="row" style="margin-top:10px"><button class="ghost sm" data-go="${d.ticker}">Lihat detail lengkap</button><button class="sm" onclick="addDlg('${d.ticker}',${d.price})">+ Portofolio</button></div>`;
+}
+async function quickCheck(t){
+  t=(t||'').toUpperCase().replace('.JK','').trim(); if(!t)return;
+  const row=SNAP&&(SNAP.quick||[]).find(x=>x.ticker===t);
+  if(row){QC=row; $('#qcr').innerHTML=qcCard(QC)}
+  $('#qcr').insertAdjacentHTML('afterbegin',row?'':`<p class="mut">Menganalisis ${esc(t)}…</p>`);
+  try{const d=await api('/api/stock?t='+encodeURIComponent(t));
+    QC={ticker:d.ticker,name:d.name,price:d.tech.price,chg:d.tech.chg,halal:d.halal,v:E.verdict(d.tech,d.scores,d.plans,!!(d.fund.years&&d.fund.years.length))};
+    if(CUR==='cepat')$('#qcr').innerHTML=qcCard(QC)}
+  catch(e){ if(!row&&e.message!='login') $('#qcr').innerHTML=`<p class="err">${esc(e.message)}</p>`}
+}
+function rCepat(){
+  const HN=[['all','Semua'],['scalp','Scalping'],['3h','3 Hari'],['1m','1 Minggu'],['2m','2 Minggu'],['3b','3 Bulan'],['lt','1 Tahun+'],['none','Hindari dulu']];
+  const Q=(SNAP.quick||[]).filter(x=>QF==='all'||(QF==='none'?!x.v.best:x.v.best&&x.v.best.h===QF));
+  const cnt=k=>(SNAP.quick||[]).filter(x=>k==='all'||(k==='none'?!x.v.best:x.v.best&&x.v.best.h===k)).length;
+  $('#t-cepat').innerHTML=partialNote()+`<div class="card" style="margin-bottom:14px"><h3>⚡ Cek Cepat <small>ketik kode saham → langsung tahu cocok untuk berapa lama, beli & jual di mana</small></h3>
+    <form id="qcf" class="row"><input id="qcq" list="tkl" placeholder="Kode saham, mis. BBRI" maxlength="8" style="flex:1;max-width:260px;font-size:16px;text-transform:uppercase" value="${QC?QC.ticker:''}"><button>Cek</button></form>
+    <div id="qcr" style="margin-top:12px">${QC?qcCard(QC):'<p class="mut">Ketik kode saham lalu tekan Enter, atau klik kode pada tabel di bawah.</p>'}</div></div>
+   <div class="card"><h3>Ringkasan cepat semua saham <small>horizon paling cocok untuk tiap saham · klik judul kolom untuk mengurutkan</small></h3>
+    <div class="pill" style="margin-bottom:10px">${HN.map(([k,l])=>`<button class="chip${QF===k?' on':''}" data-qf="${k}">${l} (${cnt(k)})</button>`).join('')}</div>
+    <div class="tw"><table><tr><th>Kode</th><th class="n">Harga</th><th>Paling cocok</th><th>Beli</th><th class="n">Jual (target)</th><th class="n">Potensi</th><th class="n">Cut loss</th><th>Simpan</th><th>Jual paling lambat</th><th>Halal</th></tr>
+    ${Q.map(x=>{const b=x.v.best;return `<tr><td><span class="tk" data-qc="${x.ticker}">${x.ticker}</span></td><td class="n">${f0(x.price)}<br>${pct(x.chg)}</td>
+      <td>${b?`<span class="b ${b.strong?'g':'y'}">${b.name}</span>`:'<span class="b r">Hindari dulu</span>'}</td>
+      <td>${b?b.buy:'-'}</td><td class="n up">${b?f0(b.target):'-'}</td><td class="n">${b?pct(b.gain,1):'-'}</td><td class="n down">${b?f0(b.stop):'-'}</td>
+      <td class="reason" style="min-width:150px">${b?esc(b.hold):'-'}</td><td>${b?esc(b.sellBy):'-'}</td><td>${halalB(x.halal)}</td></tr>`}).join('')||'<tr><td colspan=10 class="mut">Tidak ada saham pada kategori ini.</td></tr>'}</table></div>
+    <p class="note">Hijau = sinyal kuat, kuning = sinyal sedang. "Jual paling lambat" dihitung dengan hari bursa (Senin–Jumat); hari libur bursa belum diperhitungkan. Jual lebih cepat bila target tercapai, dan wajib jual bila harga tembus cut loss.</p></div>`;
+  $('#qcf').onsubmit=e=>{e.preventDefault(); quickCheck($('#qcq').value)};
+  $$('[data-qf]').forEach(b=>b.onclick=()=>{QF=b.dataset.qf; rCepat()});
+}
+document.addEventListener('click',e=>{const q=e.target.closest('[data-qc]'); if(q){quickCheck(q.dataset.qc); if(CUR==='cepat'){$('#qcq').value=q.dataset.qc; scrollTo({top:0,behavior:'smooth'})}}});
 
 /* ---------------- Rekomendasi ---------------- */
 const HOR=[['3h','3 Hari'],['1m','1 Minggu'],['2m','2 Minggu'],['3b','3 Bulan'],['lt','Jangka Panjang (> 1 tahun)']];
@@ -856,7 +924,7 @@ function sha256js(m){const K=[],H=[];let n=2;const f=x=>(x-(x|0))*4294967296|0;
 function start(){ try{$('#ri').value=localStorage.getItem('ri')||'5'}catch(e){$('#ri').value='5'} schedule(); sessInfo(); setInterval(sessInfo,60000); show('pasar'); setTimeout(fillList,1500);
   setTimeout(()=>{ if(!SNAP) api('/api/snapshot').then(s=>{SNAP=s}).catch(()=>{}) },500) }
 const fixNav=()=>{$('nav').style.top=$('header').offsetHeight+'px'}; addEventListener('resize',fixNav); new ResizeObserver(fixNav).observe($('header'));
-E.onUpdate(sn=>{SNAP=sn; if(['rek','harian','goreng','fund'].includes(CUR)) render(CUR)});
+E.onUpdate(sn=>{SNAP=sn; if(['cepat','rek','harian','goreng','fund'].includes(CUR)) render(CUR)});
 async function fillList(){try{const u=await E.universe(); if(u) $('#tkl').innerHTML=Object.values(u).map(d=>`<option value="${d.ticker}">${esc(d.description||'')}</option>`).join('')}catch(e){}}
 /* ---------------- Urutkan tabel: klik judul kolom mana saja ---------------- */
 const SORTS={};

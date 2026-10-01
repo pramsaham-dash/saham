@@ -86,7 +86,7 @@ dialog::backdrop{background:#0006}
   <section id="t-pasar"></section><section id="t-cepat" class="hide"></section><section id="t-rek" class="hide"></section><section id="t-harian" class="hide"></section>
   <section id="t-goreng" class="hide"></section><section id="t-fund" class="hide"></section><section id="t-detail" class="hide"></section>
   <section id="t-porto" class="hide"></section><section id="t-sumber" class="hide"></section>
-  <p class="note">⚠️ Analisis otomatis untuk edukasi, bukan ajakan jual/beli. Data diambil langsung dari TradingView, Yahoo Finance & Google News oleh browser Anda (bisa tertunda ±10–15 menit). Portofolio tersimpan di browser ini. Status halal adalah indikasi; verifikasi dengan Daftar Efek Syariah OJK / ISSI.</p>
+  <p class="note">⚠️ Analisis otomatis untuk edukasi, bukan ajakan jual/beli. Data diambil langsung dari TradingView oleh browser Anda (data bursa gratis bisa tertunda ±10–15 menit). Portofolio tersimpan di browser ini. Status halal adalah indikasi; verifikasi dengan Daftar Efek Syariah OJK / ISSI.</p>
 </main>
 <textarea id="wsrc" hidden>// Proxy pribadi untuk Dashboard Saham IDX - Cloudflare Workers (gratis, 100.000 request/hari)
 // Hanya meneruskan permintaan ke sumber data saham di bawah ini.
@@ -135,9 +135,9 @@ export default {
 <script>
 /* ======================================================================
    MESIN DATA & ANALISIS (berjalan di browser, tanpa server)
-   Sumber: TradingView screener, Yahoo Finance, Google News RSS
-   Browser memblokir permintaan lintas-situs dari file lokal (CORS),
-   jadi permintaan dicoba langsung lalu lewat proxy CORS publik.
+   Sumber: TradingView screener (langsung dari browser, tanpa proxy)
+   TradingView mengizinkan browser (termasuk file lokal) mengambil data langsung,
+   jadi tidak perlu server atau proxy.
    ====================================================================== */
 const E=(()=>{
 const FEE_BUY=0.0015, FEE_SELL=0.0025;
@@ -172,269 +172,139 @@ function cached(key,ttl,fn,force){
 async function pool(items,fn,n=CONC){const out={};let i=0;
   await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{while(i<items.length){const it=items[i++];try{out[it]=await fn(it)}catch(e){out[it]=null}}}));return out}
 
-/* ---------- jaringan + proxy CORS ---------- */
-const PROXIES=[
-  {id:'direct',name:'Langsung (tanpa proxy)',wrap:u=>u,post:true},
-  {id:'corsproxy',name:'corsproxy.io',wrap:u=>'https://corsproxy.io/?url='+encodeURIComponent(u),post:true},
-  {id:'allorigins',name:'allorigins.win',wrap:u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),post:false},
-  {id:'codetabs',name:'codetabs.com',wrap:u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u),post:false},
-  {id:'thingproxy',name:'thingproxy',wrap:u=>'https://thingproxy.freeboard.io/fetch/'+u,post:true},
-];
-/* ---------- Koneksi stabil ----------
-   - Proxy pribadi (bila diisi) selalu dicoba pertama.
-   - Tiap jalur dipantau: yang gagal 2x / kena limit (403/429) diistirahatkan beberapa menit.
-   - Isi jawaban diperiksa (proxy kadang membalas halaman error dengan status 200).
-   - Gagal? dicoba ulang bertahap: jalur terbaik -> 2 jalur sehat berikutnya -> semua jalur, lalu 1 putaran lagi. */
-const HEALTH={};
-const healthy=p=>!HEALTH[p.id]||Date.now()>=HEALTH[p.id].until;
-function markBad(p,e){const h=HEALTH[p.id]=HEALTH[p.id]||{fail:0,until:0};h.fail++;const lim=/HTTP (403|429|5\d\d)/.test(String(e&&e.message));
-  if(h.fail>=2||lim)h.until=Date.now()+Math.min(10*60e3,(lim?90e3:45e3)*h.fail)}
-function proxyList(method,src){
-  const cfg=LS.get('proxycfg',{mode:'auto',custom:''});
-  let list=[...PROXIES];
-  if(cfg.mode!=='auto'){const f=list.find(p=>p.id===cfg.mode); if(f) list=[f,...list.filter(p=>p!==f)]}
-  const w=WORK[src]; if(w){const f=list.find(p=>p.id===w); if(f) list=[f,...list.filter(p=>p!==f)]}
-  list=[...list.filter(healthy),...list.filter(p=>!healthy(p))];
-  if(cfg.custom){const pre=cfg.custom.trim(); list.unshift({id:'custom',name:'Proxy pribadi',wrap:u=>pre.includes('{url}')?pre.replace('{url}',encodeURIComponent(u)):pre+encodeURIComponent(u),post:true})}
-  return list.filter(p=>method==='GET'||p.post);
-}
-const WORK=LS.get('proxywork',{});
-async function tryProxy(p,url,o,ctl){
-  const tm=setTimeout(()=>ctl.abort(),o.timeout||15000), t0=performance.now();
-  try{const opt={method:o.method||'GET',signal:ctl.signal,cache:'no-store'};
-    if(o.body){opt.body=o.body; opt.headers={'Content-Type':p.id==='direct'?'text/plain;charset=UTF-8':'application/json'}}
-    const r=await fetch(p.wrap(url),opt); if(!r.ok) throw new Error('HTTP '+r.status);
-    const t=await r.text(); let out;
-    try{out=o.text?t:JSON.parse(t)}catch(e){throw new Error('jawaban bukan data (proxy error)')}
-    if(o.check&&!o.check(out)) throw new Error('isi data tidak valid');
-    return {out,ms:Math.round(performance.now()-t0)};
-  }finally{clearTimeout(tm)}
-}
-function markOk(src,p,ms){if(p.id!=='custom'&&WORK[src]!==p.id){WORK[src]=p.id;LS.set('proxywork',WORK)} HEALTH[p.id]={fail:0,until:0,ms}; STATUS[src]={ok:true,time:nowStr(),via:p.name,ms}}
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function race(ps,url,o,src){const ctls=ps.map(()=>new AbortController());
-  try{const w=await Promise.any(ps.map((p,i)=>tryProxy(p,url,o,ctls[i]).then(r=>({...r,p}),e=>{markBad(p,e);throw e})));ctls.forEach(c=>c.abort());markOk(src,w.p,w.ms);return w.out}
-  catch(e){throw new Error(((e.errors||[e]).map(x=>x&&x.message).filter(Boolean)[0])||'gagal')}}
-async function xfetch(url,{method='GET',body=null,src='Web',timeout=10000,text=false,check=null}={}){
-  const o={method,body,timeout,text,check}; let last='';
-  for(let round=0;round<2;round++){
-    const list=proxyList(method,src); if(!list.length)break;
-    try{const r=await tryProxy(list[0],url,o,new AbortController());markOk(src,list[0],r.ms);return r.out}catch(e){markBad(list[0],e);last=e.message}
-    const nxt=list.slice(1).filter(healthy).slice(0,2);
-    if(nxt.length){try{return await race(nxt,url,o,src)}catch(e){last=e.message}}
-    const rest=list.slice(1).filter(p=>!nxt.includes(p));
-    if(rest.length){try{return await race(rest,url,{...o,timeout:timeout+3000},src)}catch(e){last=e.message}}
-    if(round===0)await sleep(800);
-  }
-  STATUS[src]={ok:false,time:nowStr(),err:'Semua jalur gagal: '+last}; throw new Error(src+' tidak dapat diakses ('+last+')');
-}
-async function speedTest(){
-  const url='https://query1.finance.yahoo.com/v8/finance/chart/BBCA.JK?range=5d&interval=1d';
-  const cfg=LS.get('proxycfg',{mode:'auto',custom:''}); const list=proxyList('GET','__t');
-  const res=await Promise.all(list.map(async p=>{try{const r=await tryProxy(p,url,{method:'GET',timeout:12000},new AbortController());return{id:p.id,name:p.name,ms:r.ms,post:p.post}}catch(e){return{id:p.id,name:p.name,ms:null,err:String(e.message||e),post:p.post}}}));
-  const ok=res.filter(r=>r.ms!=null).sort((a,b)=>a.ms-b.ms);
-  if(ok[0]&&cfg.mode==='auto'){WORK['Yahoo Finance']=ok[0].id;WORK['Google News']=ok[0].id;const pp=ok.find(r=>r.post);if(pp)WORK['TradingView']=pp.id;LS.set('proxywork',WORK)}
-  return res.sort((a,b)=>(a.ms??1e9)-(b.ms??1e9));
-}
-
-/* ---------- TradingView ---------- */
+/* ---------- Koneksi: TradingView LANGSUNG (tanpa proxy) ----------
+   TradingView screener mengizinkan browser mengambil data langsung (diuji dari laptop pengguna,
+   termasuk file lokal). Satu permintaan = harga + indikator + rasio untuk SEMUA saham IDX.
+   Proxy hanya dipakai (opsional) untuk judul berita, bila proxy pribadi diisi. */
 const TV_URL='https://scanner.tradingview.com/indonesia/scan';
-const TV_CORE=["name","description","close","change","volume","market_cap_basic","sector","industry"];
-const TV_OPT=["open","high","low","average_volume_10d_calc","relative_volume_10d_calc","price_earnings_ttm","price_book_fq","return_on_equity","debt_to_equity","net_margin","free_cash_flow","cash_n_short_term_invest_fq","total_revenue","net_income","earnings_per_share_diluted_ttm","total_revenue_yoy_growth_ttm","RSI","SMA20","SMA50","SMA200","ATR","Volatility.D","Perf.W","Perf.1M","Perf.3M","Perf.Y","Recommend.All","gap","dividend_yield_recent"];
-function tvQuery(cols,rng=[0,1200],tickers=[]){
-  return xfetch(TV_URL,{method:'POST',src:'TradingView',timeout:12000,check:j=>j&&Array.isArray(j.data),body:JSON.stringify({filter:[{left:"type",operation:"equal",right:"stock"}],options:{lang:"en"},markets:["indonesia"],symbols:{query:{types:[]},tickers},columns:cols,sort:{sortBy:"market_cap_basic",sortOrder:"desc"},range:rng})});
-}
-let TVCOLS=null;
-async function tvColumns(){
-  if(TVCOLS) return TVCOLS;
-  const c=LS.get('tvcols',null); TVCOLS=c&&Date.now()-c.t<7*864e5?c.v:[...TV_CORE,...TV_OPT]; return TVCOLS;
-}
-async function tvProbe(){const ok=[];for(const col of TV_OPT){try{await tvQuery([...TV_CORE,col],[0,1]);ok.push(col)}catch(_){}}
-  TVCOLS=[...TV_CORE,...ok];LS.set('tvcols',{t:Date.now(),v:TVCOLS});return TVCOLS}
-function tvRows(cols,js){const out={};for(const row of js.data||[]){const d={};cols.forEach((c,i)=>d[c]=row.d[i]);const t=String(d.name||row.s.split(':').pop()).toUpperCase();if(!/^[A-Z]{4}$/.test(t))continue;d.ticker=t;out[t]=d}return out}
-async function tvUniverse(){let cols=await tvColumns(),js;try{js=await tvQuery(cols)}catch(e){if(!/HTTP 400/.test(e.message))throw e;cols=await tvProbe();js=await tvQuery(cols)}const U=tvRows(cols,js);if(Object.keys(U).length<50)throw new Error('Data TradingView kosong');return U}
-/* Harga pasar: TradingView (1 request). Jika gagal -> data TradingView terakhir yang tersimpan
-   + harga terbaru dari Yahoo "spark" (GET, 20 saham per request). Data baik tidak pernah ditimpa error. */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function tvPost(body,timeout=15000){
+  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),timeout),t0=performance.now();
+  try{const r=await fetch(TV_URL,{method:'POST',body:JSON.stringify(body),headers:{'Content-Type':'text/plain;charset=UTF-8'},signal:ctl.signal,cache:'no-store'});
+    if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();if(!j||!Array.isArray(j.data))throw new Error('data tidak valid');
+    STATUS['TradingView']={ok:true,time:nowStr(),via:'langsung (tanpa proxy)',ms:Math.round(performance.now()-t0)};return j}
+  catch(e){const m=e.name==='AbortError'?'waktu habis (koneksi lambat)':e.message==='Failed to fetch'?'tidak terhubung ke internet / diblokir jaringan':e.message;
+    STATUS['TradingView']={ok:false,time:nowStr(),err:m};throw new Error('TradingView: '+m)}
+  finally{clearTimeout(tm)}}
+async function tvRetry(body,timeout){try{return await tvPost(body,timeout)}catch(e){await sleep(1200);try{return await tvPost(body,timeout+10000)}catch(e2){await sleep(2500);return await tvPost(body,timeout+15000)}}}
+const LIGHT=["name","description","sector","industry","close","change","volume","open","high","low","high[1]","low[1]","close[1]","close[2]","market_cap_basic",
+  "average_volume_10d_calc","relative_volume_10d_calc","RSI","RSI[1]","SMA5","SMA10","SMA20","SMA50","SMA200","SMA20[1]","SMA50[1]","SMA200[1]","SMA20[2]","SMA50[2]","SMA200[2]",
+  "EMA5","MACD.macd","MACD.signal","MACD.macd[1]","MACD.signal[1]","ATR","Volatility.D","VWAP","Perf.W","Perf.1M","Perf.3M","Perf.6M","Perf.YTD","Perf.Y",
+  "High.1M","Low.1M","High.3M","Low.3M","price_52_week_high","price_52_week_low","price_earnings_ttm","price_book_fq","type"];
+const HEAVY=["return_on_equity","debt_to_equity","net_margin","free_cash_flow_ttm","free_cash_flow_fy","cash_n_short_term_invest_fq","cash_f_operating_activities_ttm",
+  "total_debt_fq","total_equity_fq","oper_income_fy","net_income_fy","total_revenue_fy","total_revenue_yoy_growth_ttm","net_income_yoy_growth_ttm",
+  "earnings_per_share_diluted_ttm","dividends_yield_current","total_revenue_fy_h","net_income_fy_h","free_cash_flow_fy_h","total_debt_fy_h","total_assets_fy_h","fiscal_period_fy_h"];
+const toRows=(cols,js)=>{const o={};for(const r of js.data||[]){const t=r.s.split(':').pop().toUpperCase();if(!/^[A-Z]{4}$/.test(t))continue;const d={ticker:t};
+  cols.forEach((c,i)=>{let v=r.d[i];if(Array.isArray(v))v=v.slice(0,6);d[c]=v});o[t]=d}return o};
+const qAll=cols=>({markets:["indonesia"],filter:[{left:"type",operation:"equal",right:"stock"}],columns:cols,sort:{sortBy:"market_cap_basic",sortOrder:"desc"},range:[0,1500]});
 const FRESH={price:null};
-let ULAST=null;
-function saveULast(U){try{const cols=[...(TVCOLS||TV_CORE),'ticker'],rows=Object.values(U).map(d=>cols.map(c=>d[c]??null));
-  localStorage.setItem('tvlast',JSON.stringify({t:Date.now(),cols,rows}))}catch(e){} ULAST={t:Date.now(),U}}
-function loadULast(){if(ULAST)return ULAST;const e=LS.get('tvlast',null);if(!e)return null;const U={};
-  e.rows.forEach(r=>{const d={};e.cols.forEach((c,i)=>d[c]=r[i]);U[d.ticker]=d});ULAST={t:e.t,U};return ULAST}
-async function yahooSpark(tks){
-  const out={},chunks=[];for(let i=0;i<tks.length;i+=20)chunks.push(tks.slice(i,i+20));
-  await pool(chunks.map((_,i)=>i),async i=>{
-    const u=`https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunks[i].map(t=>t+'.JK').join(',')}&range=5d&interval=1d`;
-    let js; try{js=await xfetch(u,{src:'Yahoo Finance',check:j=>j&&typeof j==='object'})}catch(e){js=await xfetch(u.replace('query1','query2').replace('/v7/','/v8/'),{src:'Yahoo Finance',check:j=>j&&typeof j==='object'})}
-    const put=(sym,cl,meta)=>{const t=String(sym).replace('.JK','');cl=(cl||[]).filter(x=>x!=null);if(!cl.length)return;
-      const price=(meta&&meta.regularMarketPrice)||cl[cl.length-1],prev=(meta&&(meta.previousClose||meta.chartPreviousClose&&cl.length<2&&meta.chartPreviousClose))||cl[cl.length-2]||price;out[t]={price,prev}};
-    if(js.spark&&js.spark.result)js.spark.result.forEach(r=>{const rs=r.response&&r.response[0];if(rs)put(r.symbol,rs.indicators&&rs.indicators.quote&&rs.indicators.quote[0].close,rs.meta)});
-    else Object.entries(js).forEach(([k,v])=>{if(v&&v.close)put(k,v.close,{previousClose:v.previousClose})});
-  },3);
-  return out}
-async function sparkUniverse(base){
-  const U={};for(const[t,d]of Object.entries(base))U[t]={...d,_stale:true};
-  const liq=Object.values(U).sort((a,b)=>s(b.close)*s(b.average_volume_10d_calc||b.volume)-s(a.close)*s(a.average_volume_10d_calc||a.volume)).slice(0,120).map(d=>d.ticker);
-  const tks=[...new Set([...liq,...portLoad().positions.map(p=>p.ticker)])],sp=await yahooSpark(tks).catch(()=>({}));
-  let n=0;for(const[t,q]of Object.entries(sp)){const d=U[t]||(U[t]={ticker:t,description:t});d.close=q.price;d.change=(q.price/q.prev-1)*100;d.open=d.high=d.low=null;d._stale=false;d._spark=true;n++}
-  return{U,n}}
+let UMEM=null;
+function heavyGet(){return LS.get('tvheavy',null)}
+async function heavyLoad(force){const h=heavyGet();if(h&&!force&&Date.now()-h.t<12*3600e3)return h.rows;
+  try{PROG('Mengambil data laporan keuangan (TradingView)…');const rows=toRows(HEAVY,await tvRetry(qAll(HEAVY),20000));try{localStorage.setItem('tvheavy',JSON.stringify({t:Date.now(),rows}))}catch(e){}return rows}
+  catch(e){return h?h.rows:{}}}
 async function getUniverse(force){
-  const c=C.tv; if(c&&!force&&Date.now()-c.t<60e3)return[c.v,c.src];
+  const c=C.tv;if(c&&!force&&Date.now()-c.t<55e3)return[c.v,'TradingView'];
   if(INF.tv)return INF.tv;
   const p=(async()=>{
-    try{let U;try{U=await tvUniverse()}catch(e1){await sleep(1500);U=await tvUniverse()}saveULast(U);FRESH.price={ok:true,src:'TradingView',t:Date.now(),n:Object.keys(U).length};C.tv={t:Date.now(),v:U,src:'TradingView'};return[U,'TradingView']}
-    catch(e){
-      const last=loadULast(),base=last?last.U:Object.fromEntries(FALLBACK.map(t=>[t,{ticker:t,description:t}]));
-      const {U,n}=await sparkUniverse(base);
-      if(n>0){FRESH.price={ok:true,src:'Yahoo (cadangan)',t:Date.now(),n,err:e.message};C.tv={t:Date.now(),v:U,src:'Yahoo (cadangan)'};return[U,'Yahoo (cadangan)']}
-      if(c){FRESH.price={ok:false,src:'data sebelumnya',t:c.t,err:e.message};return[c.v,c.src]}
-      if(last){FRESH.price={ok:false,src:'data tersimpan',t:last.t,err:e.message};C.tv={t:Date.now()-50e3,v:last.U,src:'data tersimpan'};return[last.U,'data tersimpan']}
-      FRESH.price={ok:false,src:'-',t:null,err:e.message};return[null,'fallback']}
+    try{PROG('Mengambil harga terkini (TradingView)…');
+      const [js,H]=await Promise.all([tvRetry(qAll(LIGHT),15000),heavyLoad(false)]);
+      const L=toRows(LIGHT,js),U={};for(const t in L)U[t]={...(H[t]||{}),...L[t]};
+      if(Object.keys(U).length<50)throw new Error('data saham kosong');
+      UMEM={t:Date.now(),U};try{localStorage.setItem('tvlight',JSON.stringify({t:Date.now(),rows:L}))}catch(e){}
+      FRESH.price={ok:true,src:'TradingView',t:Date.now(),n:Object.keys(U).length};C.tv={t:Date.now(),v:U};PROG('');return[U,'TradingView']}
+    catch(e){PROG('');
+      if(UMEM){FRESH.price={ok:false,src:'data sebelumnya',t:UMEM.t,err:e.message};return[UMEM.U,'data sebelumnya']}
+      const l=LS.get('tvlight',null);if(l){const H=heavyGet(),U={};for(const t in l.rows)U[t]={...((H&&H.rows[t])||{}),...l.rows[t]};
+        UMEM={t:l.t,U};FRESH.price={ok:false,src:'data tersimpan',t:l.t,err:e.message};return[U,'data tersimpan']}
+      FRESH.price={ok:false,src:'-',t:null,err:e.message};throw e}
     finally{delete INF.tv}})();
   INF.tv=p;return p}
+async function tvOne(t){const cols=[...LIGHT,...HEAVY];const js=await tvRetry({markets:["indonesia"],symbols:{tickers:['IDX:'+t]},columns:cols},12000);return toRows(cols,js)[t]||null}
+async function tvIndex(){const cols=["close","change","SMA20","SMA50","SMA200","Perf.W","Perf.1M","Perf.3M","Perf.YTD","Perf.Y","description"];
+  const js=await tvRetry({markets:["indonesia"],symbols:{tickers:["IDX:COMPOSITE","IDX:LQ45"]},columns:cols},10000);
+  const o={};for(const r of js.data){const d={};cols.forEach((c,i)=>d[c]=r.d[i]);o[r.s.split(':')[1]]=d}return o}
 
-/* ---------- Yahoo ---------- */
-async function yahooChart(sym,range='1y',interval='1d'){
-  const ys=sym.startsWith('^')||sym.includes('.')?sym:sym+'.JK';
-  const u=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ys)}?range=${range}&interval=${interval}&includePrePost=false`;
-  const ck=j=>j&&j.chart&&j.chart.result&&j.chart.result[0]&&j.chart.result[0].indicators;
-  let js; try{js=await xfetch(u,{src:'Yahoo Finance',check:ck})}catch(e){js=await xfetch(u.replace('query1','query2'),{src:'Yahoo Finance',check:ck})}
-  const res=js.chart.result[0], ts=res.timestamp||[], q=res.indicators.quote[0], bars=[];
-  ts.forEach((t,i)=>{const c=q.close[i]; if(c==null)return; bars.push({t,o:q.open[i]??c,h:q.high[i]??c,l:q.low[i]??c,c,v:q.volume[i]||0})});
-  const m=res.meta||{}; return {bars,price:m.regularMarketPrice,prev:m.chartPreviousClose||m.previousClose,name:m.longName||m.shortName};
-}
-const FUND_TYPES=["TotalRevenue","NetIncome","NormalizedIncome","TotalUnusualItems","RetainedEarnings","OperatingCashFlow","FreeCashFlow","CapitalExpenditure","CashAndCashEquivalents","CashCashEquivalentsAndShortTermInvestments","TotalDebt","StockholdersEquity","TotalAssets","CurrentLiabilities","DilutedEPS","OrdinarySharesNumber","GainOnSaleOfPPE","GainOnSaleOfBusiness"];
-function fundCached(t){const e=LS.get('fund:'+t,null);return e&&Date.now()-e._ts<7*864e5?e:null}
-async function yahooFund(t,force){
-  const k='fund:'+t, e=LS.get(k,null);
-  if(e&&!force&&Date.now()-e._ts<7*864e5) return e;
-  const types=FUND_TYPES.map(x=>'annual'+x).join(',');
-  const u=`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${t}.JK?symbol=${t}.JK&type=${types}&period1=1420070400&period2=${Math.floor(Date.now()/1e3)}&merge=false&padTimeSeries=true`;
-  const js=await xfetch(u,{src:'Yahoo Finance',timeout:20000,check:j=>j&&j.timeseries}); const years={};
-  for(const it of (js.timeseries&&js.timeseries.result)||[]){const typ=((it.meta||{}).type||[''])[0], key=typ.replace('annual','');
-    for(const v of it[typ]||[]){if(!v||!v.reportedValue)continue; const y=v.asOfDate.slice(0,4); (years[y]=years[y]||{})[key]=v.reportedValue.raw}}
-  const ys=Object.keys(years).sort().slice(-5), out={years:ys,data:ys.map(y=>years[y]),_ts:Date.now()};
-  LS.set(k,out); return out;
-}
-
-/* ---------- Google News ---------- */
+/* ---------- Berita (opsional, lewat proxy pribadi) ---------- */
+function newsProxy(){const c=LS.get('proxycfg',{});return (c.custom||'').trim()}
 async function news(q,n=6){
+  const pre=newsProxy();if(!pre)return[];
   try{return await cached('news:'+q,1800,async()=>{
-    const t=await xfetch(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=id&gl=ID&ceid=ID:id`,{src:'Google News',text:true,timeout:15000,check:t=>/<rss|<item/.test(t)});
-    const doc=new DOMParser().parseFromString(t,'text/xml');
-    return [...doc.querySelectorAll('item')].slice(0,n).map(it=>({title:(it.querySelector('title')||{}).textContent,link:(it.querySelector('link')||{}).textContent,date:(it.querySelector('pubDate')||{}).textContent,source:(it.querySelector('source')||{}).textContent||''}));
-  })}catch(e){return []}
-}
+    const u=`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=id&gl=ID&ceid=ID:id`,url=pre.includes('{url}')?pre.replace('{url}',encodeURIComponent(u)):pre+encodeURIComponent(u);
+    const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),12000);
+    try{const r=await fetch(url,{signal:ctl.signal});if(!r.ok)throw new Error('HTTP '+r.status);const t=await r.text();if(!/<item/.test(t))throw new Error('bukan RSS');
+      STATUS['Berita (proxy pribadi)']={ok:true,time:nowStr()};
+      const doc=new DOMParser().parseFromString(t,'text/xml');
+      return[...doc.querySelectorAll('item')].slice(0,n).map(it=>({title:(it.querySelector('title')||{}).textContent,link:(it.querySelector('link')||{}).textContent,date:(it.querySelector('pubDate')||{}).textContent,source:(it.querySelector('source')||{}).textContent||''}))}
+    catch(e){STATUS['Berita (proxy pribadi)']={ok:false,time:nowStr(),err:e.message};throw e}finally{clearTimeout(tm)}})}catch(e){return[]}}
+async function speedTest(){const t0=performance.now();try{await tvPost({markets:["indonesia"],symbols:{tickers:["IDX:BBCA"]},columns:["close"]},10000);return[{name:'TradingView langsung',ms:Math.round(performance.now()-t0)}]}catch(e){return[{name:'TradingView langsung',ms:null,err:e.message}]}}
 
-/* ---------- indikator teknikal ---------- */
-function sma(a,n){const o=Array(a.length).fill(null);let t=0;for(let i=0;i<a.length;i++){t+=a[i];if(i>=n)t-=a[i-n];if(i>=n-1)o[i]=t/n}return o}
-function ema(a,n){const o=Array(a.length).fill(null),k=2/(n+1);let e=null;for(let i=0;i<a.length;i++){e=e==null?a[i]:a[i]*k+e*(1-k);o[i]=i>=n-1?e:null}return o}
-function rsi(a,n=14){const o=Array(a.length).fill(null);if(a.length<=n)return o;let g=0,l=0;
-  for(let i=1;i<=n;i++){const d=a[i]-a[i-1];g+=Math.max(d,0);l+=Math.max(-d,0)}g/=n;l/=n;o[n]=l?100-100/(1+g/l):100;
-  for(let i=n+1;i<a.length;i++){const d=a[i]-a[i-1];g=(g*(n-1)+Math.max(d,0))/n;l=(l*(n-1)+Math.max(-d,0))/n;o[i]=l?100-100/(1+g/l):100}return o}
-function atr(b,n=14){return sma(b.map((x,i)=>{const pc=i?b[i-1].c:x.c;return Math.max(x.h-x.l,Math.abs(x.h-pc),Math.abs(x.l-pc))}),n)}
 const tick=p=>p<200?1:p<500?2:p<2000?5:p<5000?10:25;
 function rp(p,mode='near'){if(p==null||!isFinite(p)||p<=0)return null;const t=tick(p),f={near:Math.round,down:Math.floor,up:Math.ceil}[mode];return Math.max(1,f(p/t)*t)}
-function lastCross(a,b,lb=40){const n=a.length;for(let i=n-1;i>=Math.max(0,n-lb);i--){if(i===0||a[i]==null||b[i]==null||a[i-1]==null||b[i-1]==null)continue;
-  const x0=a[i-1]-b[i-1],x1=a[i]-b[i];if(x0<=0&&x1>0)return{type:'golden',days_ago:n-1-i};if(x0>=0&&x1<0)return{type:'death',days_ago:n-1-i}}return null}
-function technicals(bars){
-  if(bars.length<30)return null;
-  const c=bars.map(b=>b.c),m5=sma(c,5),m10=sma(c,10),m20=sma(c,20),m50=sma(c,50),m200=sma(c,200),r=rsi(c);
-  const e12=ema(c,12),e26=ema(c,26),macd=e12.map((x,i)=>x!=null&&e26[i]!=null?x-e26[i]:null);
-  const mv=macd.filter(x=>x!=null),sg=mv.length>=9?ema(mv,9):mv.map(()=>null),sig=[...Array(macd.length-mv.length).fill(null),...sg];
-  const hist=macd.map((x,i)=>x!=null&&sig[i]!=null?x-sig[i]:null),a=atr(bars),L=bars.length,last=bars[L-1],price=last.c,prev=bars[L-2].c;
-  const vols=bars.map(b=>b.v),avgv20=vols.length>21?mean(vols.slice(-21,-1)):mean(vols);
-  const hr=bars.slice(-60).filter(b=>b.o),hit3=hr.length?hr.filter(b=>(b.h-b.o)/b.o>=0.03).length/hr.length:0;
-  const rng=bars.slice(-20).filter(b=>b.l).map(b=>(b.h-b.l)/b.l*100);
-  const P=(last.h+last.l+last.c)/3,piv={P,R1:2*P-last.l,S1:2*P-last.h,R2:P+(last.h-last.l),S2:P-(last.h-last.l)};
-  const chg=n=>c.length>n&&c[L-1-n]?(price/c[L-1-n]-1)*100:null, sl=n=>bars.slice(-n);
-  const mx=(arr,k)=>Math.max(...arr.map(b=>b[k])), mn=(arr,k)=>Math.min(...arr.map(b=>b[k]));
-  const M50=m50[L-1],M200=m200[L-1];
-  return {price,prev,chg:prev?(price/prev-1)*100:0,ma5:m5[L-1],ma10:m10[L-1],ma20:m20[L-1],ma50:M50,ma200:M200,ma20_prev5:L>6?m20[L-6]:null,
-    rsi:r[L-1],macd:macd[L-1],macd_sig:sig[L-1],hist:hist[L-1],hist_prev:L>1?hist[L-2]:null,atr:a[L-1],atr_pct:a[L-1]?a[L-1]/price*100:null,
-    vol:last.v,avgvol20:avgv20,rvol:avgv20?last.v/avgv20:null,value_avg:avgv20*price,
-    cross_50_200:lastCross(m50,m200,60),cross_20_50:lastCross(m20,m50,30),
-    support20:mn(sl(20),'l'),resist20:mx(sl(20),'h'),resist60:mx(sl(60),'h'),support60:mn(sl(60),'l'),hi52:mx(sl(250),'h'),lo52:mn(sl(250),'l'),
-    hit3,avg_range:rng.length?mean(rng):null,pivot:piv,chg3:chg(3),chg5:chg(5),chg10:chg(10),chg20:chg(20),chg60:chg(60),
-    trend:M50&&M200&&price>M50&&M50>M200?'Naik':M50&&M200&&price<M50&&M50<M200?'Turun':'Sideways',
-    series:{t:bars.map(b=>b.t),c,ma20:m20,ma50:m50,ma200:m200,v:vols}};
-}
-function techFromTV(d){
-  const p=d.close; if(!p)return null; const a=d.ATR||p*.02,hi=d.high||p,lo=d.low||p,P=(hi+lo+p)/3,avgv=d.average_volume_10d_calc||d.volume||0;
-  return {price:p,prev:p/(1+(d.change||0)/100),chg:d.change||0,ma5:null,ma10:null,ma20:d.SMA20,ma50:d.SMA50,ma200:d.SMA200,ma20_prev5:null,rsi:d.RSI,
-    macd:null,macd_sig:null,hist:null,hist_prev:null,atr:a,atr_pct:a/p*100,vol:d.volume,avgvol20:avgv,rvol:d.relative_volume_10d_calc,value_avg:avgv*p,
-    cross_50_200:null,cross_20_50:null,support20:lo,resist20:hi,resist60:hi,support60:lo,hi52:hi,lo52:lo,hit3:0,avg_range:d['Volatility.D'],
-    pivot:{P,R1:2*P-lo,S1:2*P-hi,R2:P+hi-lo,S2:P-(hi-lo)},chg3:null,chg5:d['Perf.W'],chg10:null,chg20:d['Perf.1M'],chg60:d['Perf.3M'],
-    trend:d.SMA50&&d.SMA200&&p>d.SMA50&&d.SMA50>d.SMA200?'Naik':'Sideways',series:null};
-}
-/* Riwayat harga harian disimpan di browser (12 jam); harga hari ini diambil dari TradingView
-   (1 request untuk semua saham) lalu digabung -> refresh cepat tanpa mengunduh ulang riwayat. */
-const BARS_TTL=12*3600e3;
-function barsGet(t){const e=LS.get('bars:'+t,null);if(!e)return null;return{ts:e.ts,bars:e.t.map((x,i)=>({t:x,o:e.o[i],h:e.h[i],l:e.l[i],c:e.c[i],v:e.v[i]}))}}
-function barsSet(t,bars){const b=bars.slice(-320),r=x=>Math.round(x*100)/100,val=JSON.stringify({ts:Date.now(),t:b.map(x=>x.t),o:b.map(x=>r(x.o)),h:b.map(x=>r(x.h)),l:b.map(x=>r(x.l)),c:b.map(x=>r(x.c)),v:b.map(x=>x.v)});
-  try{localStorage.setItem('bars:'+t,val)}catch(e){try{Object.keys(localStorage).filter(k=>k.startsWith('bars:')).sort(()=>Math.random()-.5).slice(0,30).forEach(k=>localStorage.removeItem(k));localStorage.setItem('bars:'+t,val)}catch(_){}}}
-const barsFresh=t=>{const e=LS.get('bars:'+t,null);return !!e&&Date.now()-e.ts<BARS_TTL};
-function mergeLive(bars,d){
-  if(!d||!d.close||d._stale||!bars.length)return bars;const b=bars.slice(),last=b[b.length-1],w=wib(),today=w.toISOString().slice(0,10),wd=w.getUTCDay();
-  const bar={t:Math.floor(Date.now()/1e3),o:d.open||d.close,h:Math.max(d.high||d.close,d.close),l:Math.min(d.low||d.close,d.close),c:d.close,v:d.volume||0};
-  if(wibDate(last.t).day===today)b[b.length-1]={...bar,t:last.t};
-  else if(wd>=1&&wd<=5&&w.getUTCHours()>=9&&(d.volume>0||d._spark))b.push(bar);
-  return b}
-async function techFor(t,force,live,allowFetch=true){
-  let c=barsGet(t);
-  const need=!c||Date.now()-c.ts>BARS_TTL||!live;
-  if(need&&allowFetch){try{const ch=await cached('chart:'+t,live?3600:240,()=>yahooChart(t,'2y','1d'),force&&!live);
-      if(ch.price&&ch.bars.length)ch.bars[ch.bars.length-1].c=ch.price; barsSet(t,ch.bars); c={ts:Date.now(),bars:ch.bars}}catch(e){}}
-  if(!c)return live?techFromTV(live):null;
-  try{return technicals(live?mergeLive(c.bars,live):c.bars)}catch(e){return live?techFromTV(live):null}
-}
-
 /* ---------- fundamental ---------- */
 function cv(xs){xs=xs.filter(x=>x!=null);if(xs.length<2)return null;const m=mean(xs);return m?pstdev(xs)/Math.abs(m):null}
 function valLabel(v,ind,cheap,exp,isPer){if(v==null)return'-';if(v<=0)return isPer?'Rugi':'Ekuitas negatif';
   if(ind&&ind>0){const r=v/ind;return r<.8?'Murah':r>1.25?'Mahal':'Wajar'}return v<cheap?'Murah':v>exp?'Mahal':'Wajar'}
 const ups=a=>a.slice(1).filter((b,i)=>b>a[i]).length, nondown=a=>a.slice(1).filter((b,i)=>b>=a[i]).length;
-function fundEval(f,tv,indNpm,indPer,indPbv){
-  tv=tv||{}; const res={years:[],checks:{},metrics:{},series:{}},ind=(tv.industry||'').toLowerCase(),isBank=ind.includes('bank')||ind.includes('insurance'),m=res.metrics;
-  if(f&&f.data&&f.data.length){
-    const V=k=>f.data.map(d=>d[k]??null); res.years=f.years;
-    const rev=V('TotalRevenue'),ni=V('NetIncome'),norm=V('NormalizedIncome'),unus=V('TotalUnusualItems'),re_=V('RetainedEarnings'),cfo=V('OperatingCashFlow'),fcf=V('FreeCashFlow'),capex=V('CapitalExpenditure');
-    const cash=f.data.map(d=>d.CashAndCashEquivalents??d.CashCashEquivalentsAndShortTermInvestments??null),debt=V('TotalDebt'),eq=V('StockholdersEquity');
-    const gain=f.data.map(d=>(d.GainOnSaleOfPPE||0)+(d.GainOnSaleOfBusiness||0));
-    fcf.forEach((x,i)=>{if(x==null&&cfo[i]!=null&&capex[i]!=null)fcf[i]=cfo[i]+capex[i]});
-    const npm=ni.map((n,i)=>n!=null&&rev[i]?n/rev[i]*100:null),roe=ni.map((n,i)=>n!=null&&eq[i]>0?n/eq[i]*100:null),der=debt.map((d,i)=>d!=null&&eq[i]>0?d/eq[i]:null);
-    res.series={revenue:rev,net_income:ni,npm,retained:re_,cfo,fcf,cash,debt,equity:eq,roe,der};
+/* ---------- Teknikal dari field TradingView ---------- */
+function crossEst(a0,b0,a1,b1,a2,b2,maxD){
+  if([a0,b0,a1,b1].some(x=>x==null))return null;const g0=a0-b0,g1=a1-b1,g2=a2!=null&&b2!=null?a2-b2:null;
+  if(g1<=0&&g0>0)return{type:'golden',days_ago:0};if(g1>=0&&g0<0)return{type:'death',days_ago:0};
+  if(g2!=null){if(g2<=0&&g1>0)return{type:'golden',days_ago:1};if(g2>=0&&g1<0)return{type:'death',days_ago:1}}
+  const d=g0-g1;if(!d||Math.sign(d)!==Math.sign(g0))return null;const n=Math.round(g0/d);
+  return n>=2&&n<=maxD?{type:g0>0?'golden':'death',days_ago:n,est:true}:null}
+function techTV(d){
+  const p=d.close;if(!p)return null;const a=d.ATR||p*.02,vol=s(d['Volatility.D'],a/p*100),avgv=d.average_volume_10d_calc||d.volume||0;
+  const H=d['high[1]']||d.high||p,L=d['low[1]']||d.low||p,Cl=d['close[1]']||p,P=(H+L+Cl)/3;
+  const hist=d['MACD.macd']!=null&&d['MACD.signal']!=null?d['MACD.macd']-d['MACD.signal']:null,hp=d['MACD.macd[1]']!=null&&d['MACD.signal[1]']!=null?d['MACD.macd[1]']-d['MACD.signal[1]']:null;
+  const m50=d.SMA50,m200=d.SMA200;
+  return{price:p,prev:Cl,chg:s(d.change),ma5:d.SMA5||d.EMA5,ma10:d.SMA10,ma20:d.SMA20,ma50:m50,ma200:m200,rsi:d.RSI,macd:d['MACD.macd'],macd_sig:d['MACD.signal'],hist,hist_prev:hp,
+    atr:a,atr_pct:a/p*100,vol:d.volume,avgvol20:avgv,rvol:d.relative_volume_10d_calc,value_avg:avgv*p,
+    cross_50_200:crossEst(m50,m200,d['SMA50[1]'],d['SMA200[1]'],d['SMA50[2]'],d['SMA200[2]'],60),
+    cross_20_50:crossEst(d.SMA20,m50,d['SMA20[1]'],d['SMA50[1]'],d['SMA20[2]'],d['SMA50[2]'],30),
+    support20:d['Low.1M']||L,resist20:d['High.1M']||H,support60:d['Low.3M']||L,resist60:d['High.3M']||H,hi52:d.price_52_week_high,lo52:d.price_52_week_low,
+    hit3:Math.min(.85,Math.max(0,(vol-2)/8)),avg_range:vol,pivot:{P,R1:2*P-L,S1:2*P-H,R2:P+(H-L),S2:P-(H-L)},
+    chg3:d['close[2]']?(p/d['close[2]']-1)*100:null,chg5:d['Perf.W'],chg10:d['Perf.W']!=null&&d['Perf.1M']!=null?(d['Perf.W']+d['Perf.1M'])/2:null,chg20:d['Perf.1M'],chg60:d['Perf.3M'],
+    perf:{'1 Mg':d['Perf.W'],'1 Bln':d['Perf.1M'],'3 Bln':d['Perf.3M'],'6 Bln':d['Perf.6M'],'YTD':d['Perf.YTD'],'1 Th':d['Perf.Y']},
+    today:{o:d.open,h:d.high,l:d.low,vwap:d.VWAP},
+    trend:m50&&m200&&p>m50&&m50>m200?'Naik':m50&&m200&&p<m50&&m50<m200?'Turun':'Sideways',series:null}}
+
+/* ---------- Fundamental dari riwayat laporan TradingView (hingga 5 tahun) ---------- */
+function fundEval(d,indNpm,indPer,indPbv){
+  d=d||{};const res={years:[],checks:{},metrics:{},series:{}},m=res.metrics,ind=(d.industry||'').toLowerCase(),isBank=ind.includes('bank')||ind.includes('insurance');
+  const arr=k=>Array.isArray(d[k])?d[k].slice(0,5).reverse():[];
+  const yrs=arr('fiscal_period_fy_h'),rev=arr('total_revenue_fy_h'),ni=arr('net_income_fy_h'),fcf=arr('free_cash_flow_fy_h'),debt=arr('total_debt_fy_h'),assets=arr('total_assets_fy_h');
+  const n=Math.max(rev.length,ni.length);
+  if(n){res.years=(yrs.length?yrs:Array.from({length:n},(_,i)=>String(new Date().getFullYear()-n+i))).map(String);
+    const npm=ni.map((x,i)=>x!=null&&rev[i]?x/rev[i]*100:null);
+    res.series={revenue:rev,net_income:ni,npm,fcf,debt,assets};
     const rv=rev.filter(x=>x!=null),u=ups(rv);
     m.revenue_cagr=rv.length>=2&&rv[0]>0&&rv[rv.length-1]>0?((rv[rv.length-1]/rv[0])**(1/(rv.length-1))-1)*100:null;
+    m.revenue_up_years=`${u}/${Math.max(rv.length-1,0)}`;
     res.checks.revenue_growth=rv.length>=3&&u>=rv.length-2&&rv[rv.length-1]>rv[0];
-    const nv=npm.filter(x=>x!=null); m.npm_avg=nv.length?mean(nv):null; m.npm_cv=cv(nv);
+    const nv=npm.filter(x=>x!=null);m.npm_avg=nv.length?mean(nv):null;m.npm_cv=cv(nv);
     res.checks.npm_stable_above_industry=!!(nv.length>=3&&nv.every(x=>x>0)&&(indNpm==null||Math.min(...nv)>=indNpm*.9)&&(cv(nv)||0)<.35);
-    const niv=ni.filter(x=>x!=null),Lx=ni.length-1; let oneoff=false;
-    if(ni[Lx]){if(norm[Lx]>0&&ni[Lx]>norm[Lx]*1.3)oneoff=true; if(unus[Lx]!=null&&ni[Lx]>0&&unus[Lx]>.25*ni[Lx])oneoff=true; if(gain[Lx]&&ni[Lx]>0&&gain[Lx]>.25*ni[Lx])oneoff=true}
-    const up=niv.length>=3&&niv[niv.length-1]>niv[0]&&nondown(niv)>=niv.length-2;
-    res.checks.net_income_uptrend=!!(up&&!oneoff&&niv[niv.length-1]>0); m.one_off_gain=oneoff;
-    m.der=der[Lx]; const cl=cash[Lx],opm=rev[Lx]?((rev[Lx]||0)-(ni[Lx]||0))/12:null,months=cl&&opm>0?cl/opm:null;
-    m.cash=cl; m.cash_months=months; res.checks.cash_sufficient=months!=null&&months>=3;
-    const rr=re_.filter(x=>x!=null); res.checks.retained_positive_growing=rr.length>=2&&rr.every(x=>x>0)&&nondown(rr)>=rr.length-2;
-    const cf=cfo.filter(x=>x!=null); res.checks.cfo_positive=!!(cf.length&&cf[cf.length-1]>0&&cf.filter(x=>x>0).length>=cf.length-1);
-    const ff=fcf.filter(x=>x!=null); res.checks.fcf_positive=!!(ff.length&&ff[ff.length-1]>0);
-    m.fcf=ff.length?ff[ff.length-1]:null; m.cfo=cf.length?cf[cf.length-1]:null; m.roe=roe[Lx];
-  }
-  if(tv.return_on_equity!=null)m.roe=tv.return_on_equity;
-  if(m.der==null&&tv.debt_to_equity!=null)m.der=tv.debt_to_equity;
-  if(tv.net_margin!=null)m.npm_ttm=tv.net_margin;
-  if(m.fcf==null&&tv.free_cash_flow!=null){m.fcf=tv.free_cash_flow; if(!('fcf_positive' in res.checks))res.checks.fcf_positive=tv.free_cash_flow>0}
-  if(m.cash==null&&tv.cash_n_short_term_invest_fq!=null)m.cash=tv.cash_n_short_term_invest_fq;
-  if(!('revenue_growth' in res.checks)&&tv.total_revenue_yoy_growth_ttm!=null)res.checks.revenue_growth=tv.total_revenue_yoy_growth_ttm>0;
-  if(!('npm_stable_above_industry' in res.checks)&&tv.net_margin!=null)res.checks.npm_stable_above_industry=indNpm!=null&&tv.net_margin>indNpm;
-  m.industry_npm=indNpm; res.checks.der_below_1=isBank?null:(m.der!=null&&m.der<1); m.is_financial=isBank;
-  res.checks.roe_above_15=m.roe!=null&&m.roe>15;
-  const per=tv.price_earnings_ttm,pbv=tv.price_book_fq;
+    const niv=ni.filter(x=>x!=null);
+    const oneoff=!!(d.oper_income_fy>0&&d.net_income_fy>d.oper_income_fy*1.05);
+    m.one_off_gain=oneoff;
+    res.checks.net_income_uptrend=!!(niv.length>=3&&niv[niv.length-1]>niv[0]&&nondown(niv)>=niv.length-2&&!oneoff&&niv[niv.length-1]>0);
+    res.checks.retained_positive_growing=niv.length>=3&&niv.every(x=>x>0)&&s(d.total_equity_fq)>0;
+    const ff=fcf.filter(x=>x!=null);m.fcf_hist_pos=ff.length?`${ff.filter(x=>x>0).length}/${ff.length}`:null}
+  const cash=d.cash_n_short_term_invest_fq,opm=d.total_revenue_fy?(d.total_revenue_fy-s(d.net_income_fy))/12:null;
+  m.cash=cash;m.cash_months=cash!=null&&opm>0?cash/opm:null;if(m.cash_months!=null)res.checks.cash_sufficient=m.cash_months>=3;
+  m.cfo=d.cash_f_operating_activities_ttm;if(m.cfo!=null)res.checks.cfo_positive=m.cfo>0;
+  m.fcf=d.free_cash_flow_ttm??d.free_cash_flow_fy;if(m.fcf!=null)res.checks.fcf_positive=m.fcf>0;
+  m.roe=d.return_on_equity;m.der=d.debt_to_equity;m.npm_ttm=d.net_margin;m.industry_npm=indNpm;m.is_financial=isBank;
+  if(!('revenue_growth' in res.checks)&&d.total_revenue_yoy_growth_ttm!=null)res.checks.revenue_growth=d.total_revenue_yoy_growth_ttm>0;
+  if(!('npm_stable_above_industry' in res.checks)&&d.net_margin!=null)res.checks.npm_stable_above_industry=indNpm!=null&&d.net_margin>indNpm;
+  res.checks.der_below_1=isBank?null:(m.der!=null?m.der<1:null);
+  res.checks.roe_above_15=m.roe!=null?m.roe>15:null;
+  const per=d.price_earnings_ttm,pbv=d.price_book_fq;
   Object.assign(m,{per,pbv,ind_per:indPer,ind_pbv:indPbv,per_label:valLabel(per,indPer,10,25,true),pbv_label:valLabel(pbv,indPbv,1,3,false)});
   const keys=["revenue_growth","npm_stable_above_industry","net_income_uptrend","der_below_1","cash_sufficient","retained_positive_growing","cfo_positive","fcf_positive","roe_above_15"];
   const av=keys.filter(k=>res.checks[k]!=null),pass=av.filter(k=>res.checks[k]).length;
-  res.score=av.length?Math.round(pass/av.length*100):0; res.passed=pass; res.total=av.length; return res;
-}
+  res.score=av.length?Math.round(pass/av.length*100):0;res.passed=pass;res.total=av.length;return res}
+
 function syariahList(){const t=LS.get('syariahlist','');const set=new Set((t.toUpperCase().match(/\b[A-Z]{4}\b/g))||[]);return set.size?set:null}
 function halal(t,tv,der){
   const ov=syariahList(); if(ov)return ov.has(t)?'Syariah (ISSI)':'Non-syariah / tidak di DES';
@@ -484,8 +354,6 @@ function medFor(med,tv,x){if(!tv)return null;for(const key of['industry','sector
 function baseItem(r){const tk=r.tk,fe=r.fe||{metrics:{},score:null},m=fe.metrics;
   return {ticker:r.ticker,name:r.name,sector:r.sector,price:tk.price,chg:tk.chg,rsi:tk.rsi,trend:tk.trend,roe:m.roe,per:m.per,pbv:m.pbv,per_label:m.per_label,pbv_label:m.pbv_label,
     fscore:fe.score,halal:r.halal,cross:tk.cross_50_200,cross2:tk.cross_20_50,rvol:tk.rvol}}
-function recItem(r,h){const it={...baseItem(r),...plan(r.tk,h),score:Math.round(r.sc[h]*10)/10,reason:reason(r.tk,r.fe,h)};const se=r.tk.series,n={lt:250,'3b':120,'2m':60,'1m':40,'3h':20}[h];
-  if(se)it.spark={t:se.t.slice(-n),c:se.c.slice(-n)};return it}
 function screenRow(r){const fe=r.fe,tk=r.tk,m=fe.metrics;return {ticker:r.ticker,name:r.name,sector:r.sector,price:tk.price,chg:tk.chg,checks:fe.checks,score:fe.score,passed:fe.passed,total:fe.total,
   roe:m.roe,der:m.der,npm:m.npm_avg!=null?m.npm_avg:m.npm_ttm,ind_npm:m.industry_npm,cagr:m.revenue_cagr,per:m.per,pbv:m.pbv,per_label:m.per_label,pbv_label:m.pbv_label,cash_months:m.cash_months,fcf:m.fcf,halal:r.halal,full:r.has_fund,one_off:m.one_off_gain}}
 function session(){const d=wib(),wd=(d.getUTCDay()+6)%7,hm=d.getUTCHours()*60+d.getUTCMinutes(),now=`${p2(d.getUTCDate())}-${p2(d.getUTCMonth()+1)}-${d.getUTCFullYear()} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())} WIB`;
@@ -495,20 +363,6 @@ function session(){const d=wib(),wd=(d.getUTCDay()+6)%7,hm=d.getUTCHours()*60+d.
   return{now,status:st,sesi1:'09:00 - '+(fri?'11:30':'12:00'),sesi2:(fri?'14:00':'13:30')+' - 15:49'}}
 function wibDate(ts){const d=new Date(ts*1e3+7*3600e3);return{day:d.toISOString().slice(0,10),h:d.getUTCHours()}}
 
-async function scalping(rows,allowFetch){
-  const c=rows.filter(r=>r.tk.value_avg>=2e10&&s(r.tk.avg_range)>=2.5).sort((a,b)=>sc(b)-sc(a)).slice(0,10);
-  function sc(r){return s(r.tk.avg_range)*3+Math.min(s(r.tk.rvol,1),3)*4+(r.tk.trend==='Naik'?5:0)}
-  const hh=wib().getUTCHours(),useI=hh>=11&&hh<17;
-  const I=useI?await pool(c.map(r=>r.ticker),t=>(allowFetch||C['intra:'+t])?cached('intra:'+t,180,()=>yahooChart(t,'1d','5m')).catch(()=>null):null,10):{},today=wib().toISOString().slice(0,10);
-  return c.map(r=>{const tk=r.tk,pv=tk.pivot,mid=(pv.S1+pv.P)/2;
-    const pagi={buy:`${rp(pv.S1,'down')} - ${rp(mid)}`,tp:`${rp(pv.P>mid*1.008?pv.P:pv.R1,'up')} / ${rp(pv.R1,'up')}`,sl:rp(pv.S1-2*tick(pv.S1),'down'),basis:`Pivot harian: P ${rp(pv.P)}, S1 ${rp(pv.S1)}, R1 ${rp(pv.R1)}`};
-    let siang=null;const ch=I[r.ticker];
-    if(ch&&ch.bars.length){const mb=ch.bars.filter(b=>{const w=wibDate(b.t);return w.day===today&&w.h<12});
-      if(mb.length){const hi=Math.max(...mb.map(b=>b.h)),lo=Math.min(...mb.map(b=>b.l)),vw=mb.reduce((a,b)=>a+b.c*b.v,0)/Math.max(1,mb.reduce((a,b)=>a+b.v,0)),bz=lo+(hi-lo)*.3;
-        siang={buy:`${rp(lo+(hi-lo)*.15,'down')} - ${rp(Math.min(bz,vw))}`,tp:`${rp(vw+(hi-vw)*.6,'up')} / ${rp(hi,'up')}`,sl:rp(lo-2*tick(lo),'down'),basis:`Range sesi 1 hari ini ${rp(lo)}-${rp(hi)}, VWAP ${rp(vw)}`}}}
-    if(!siang)siang={buy:`${rp(pv.P*.995,'down')} - ${rp(pv.P)}`,tp:`${rp(pv.R1,'up')}`,sl:rp(pv.S1,'down'),basis:'Data sesi 1 belum tersedia - pakai pivot (perbarui setelah 12:00)'};
-    return{...baseItem(r),pagi,siang,avg_range:tk.avg_range,value:tk.value_avg}});
-}
 function gorengan(U){const out=[];
   for(const [t,d] of Object.entries(U)){if(d._stale||d._spark)continue;const p=s(d.close),ch=s(d.change),rv=s(d.relative_volume_10d_calc,1),mc=s(d.market_cap_basic),pw=s(d['Perf.W']),pm=s(d['Perf.1M']),per=d.price_earnings_ttm,pbv=d.price_book_fq,val=p*s(d.volume);
     if(val<5e8)continue;const f=[];let sc=0;
@@ -545,70 +399,6 @@ function verdict(tk,sc,plans,hasFund){
   return{items,best:best?{...best,strong:best.level==='good'}:null,why:bits.join(' · ')};
 }
 function planAll(tk){const o={};for(const h of['3h','1m','2m','3b','lt'])o[h]=plan(tk,h);return o}
-async function buildSnapshot(force,full){
-  PROG('Mengambil harga terkini (TradingView)…');
-  const [U,src]=await getUniverse(force), med=U?industryMedians(U):{}; if(!U) full=true;
-  let cands=U?Object.values(U).sort((a,b)=>s(b.close)*s(b.average_volume_10d_calc||b.volume)-s(a.close)*s(a.average_volume_10d_calc||a.volume)).slice(0,N_TECH).map(d=>d.ticker):FALLBACK.slice(0,N_TECH);
-  const port=portLoad().positions.map(p=>p.ticker); cands=[...new Set([...cands,...port])];
-  let done=0; const T=await pool(cands,async t=>{const r=await techFor(t,force,(U||{})[t],full);if(full)PROG(`Riwayat harga ${++done}/${cands.length}…`);return r},full?5:50);
-  const missB=cands.filter(t=>!barsFresh(t)).length;
-  for(const t of cands)if(!T[t]&&U&&U[t])T[t]=techFromTV(U[t]);
-  const pre=t=>{const d=(U||{})[t]||{};let v=0;if(s(d.return_on_equity)>15)v+=2;if(d.debt_to_equity!=null&&d.debt_to_equity<1)v++;if(s(d.net_margin)>s(medFor(med,d,'npm')))v++;if(s(d.free_cash_flow)>0)v++;if(s(d.price_earnings_ttm)>0)v++;return v+s(d.market_cap_basic)/1e15};
-  const fc=[...new Set([...cands.filter(t=>T[t]).sort((a,b)=>pre(b)-pre(a)).slice(0,N_FUND),...port])];
-  done=0; const F=full?await pool(fc,async t=>{const r=await yahooFund(t,false).catch(()=>null);PROG(`Laporan keuangan ${++done}/${fc.length}…`);return r},4):Object.fromEntries(fc.map(t=>[t,fundCached(t)]));
-  const missF=fc.filter(t=>!fundCached(t)).length;
-  const rows=[];
-  for(const t of cands){const tk=T[t];if(!tk)continue;const tv=(U||{})[t]||{},hasF=!!F[t];
-    const fe=(t in F||Object.keys(tv).length)?fundEval(F[t],tv,medFor(med,tv,'npm'),medFor(med,tv,'per'),medFor(med,tv,'pbv')):null;
-    rows.push({ticker:t,name:tv.description||t,sector:tv.sector,industry:tv.industry,tk,fe,sc:scoreH(tk,fe),halal:halal(t,tv,fe?fe.metrics.der:null),has_fund:hasF})}
-  const names={lt:'Jangka Panjang (> 1 tahun)','3b':'3 Bulan','2m':'2 Minggu','1m':'1 Minggu','3h':'3 Hari'},recs={};
-  for(const h in names){let pl=rows;if(h==='lt')pl=rows.filter(r=>r.fe&&r.has_fund&&r.fe.score>=60);if(h==='3b')pl=rows.filter(r=>!r.fe||r.fe.score>=40);
-    recs[h]={title:names[h],items:[...pl].sort((a,b)=>b.sc[h]-a.sc[h]).slice(0,10).map(r=>recItem(r,h))}}
-  const day=rows.filter(r=>s(r.tk.atr_pct)>=3&&r.tk.value_avg>=1e10&&r.tk.hit3>=.25&&(!r.tk.ma20||r.tk.price>r.tk.ma20*.98)&&s(r.tk.rsi,50)<78)
-    .sort((a,b)=>(b.tk.hit3*100+Math.min(s(b.tk.rvol,1),3)*5+b.sc['3h']*.3)-(a.tk.hit3*100+Math.min(s(a.tk.rvol,1),3)*5+a.sc['3h']*.3)).slice(0,10)
-    .map(r=>{const tk=r.tk,pv=tk.pivot,e=pv.P<tk.price*1.01?Math.min(tk.price,pv.P):tk.price;
-      return{...baseItem(r),entry:`${rp(Math.max(pv.S1,e*.99),'down')} - ${rp(e)}`,target:rp(e*1.03,'up'),target2:rp(Math.max(pv.R1,e*1.045),'up'),stop:rp(e*.985,'down'),hit3:tk.hit3*100,atr_pct:tk.atr_pct}});
-  const scalp=await scalping(rows,full);
-  PROG('');
-  const failed=full?cands.filter(t=>!T[t]||!T[t].series).length:0;
-  const quick=rows.map(r=>({...baseItem(r),v:verdict(r.tk,r.sc,planAll(r.tk),r.has_fund)}));
-  return{fresh:{...FRESH.price},failed,quick,partial:!full&&(missB>0||missF>0),missing:missB+missF,updated:nowStr(),source:src,recs,daytrade:day,scalping:scalp,gorengan:U?gorengan(U):[],session:session(),
-    screener:rows.filter(r=>r.fe).map(screenRow).sort((a,b)=>b.score-a.score),universe_count:U?Object.keys(U).length:FALLBACK.length};
-}
-let ENRICH=null, ONUPD=()=>{};
-async function snapshot(force){
-  const sn=await cached('snap',60,()=>buildSnapshot(force,false),force);
-  sn.fresh={...(FRESH.price||{})};
-  if(sn.partial&&!ENRICH){ENRICH=(async()=>{try{const f=await buildSnapshot(false,true);C.snap={t:Date.now(),v:f};ONUPD(f)}catch(e){}finally{ENRICH=null;PROG('')}})()}
-  return sn}
-
-async function overview(force){return cached('ov',60,async()=>{
-  const [U,src]=await getUniverse(force),o={updated:nowStr(),source:src};
-  try{const ih=await yahooChart('^JKSE','1y','1d'),b=ih.bars,c=b.map(x=>x.c),price=ih.price||c[c.length-1];
-    o.ihsg={price,chg:(price/c[c.length-2]-1)*100,t:b.map(x=>x.t),c,ma20:sma(c,20),ma50:sma(c,50)}}catch(e){o.ihsg=null}
-  if(U){const L=Object.values(U).filter(d=>d.close&&d.volume&&!d._stale),liq=L.filter(d=>d.close*d.volume>1e9);
-    const pick=d=>({ticker:d.ticker,name:d.description,price:d.close,chg:d.change,value:d.close*d.volume,rvol:d.relative_volume_10d_calc});
-    o.gainers=[...liq].sort((a,b)=>s(b.change)-s(a.change)).slice(0,10).map(pick);
-    o.losers=[...liq].sort((a,b)=>s(a.change)-s(b.change)).slice(0,10).map(pick);
-    o.active=[...L].sort((a,b)=>b.close*b.volume-a.close*a.volume).slice(0,10).map(pick);
-    o.breadth={naik:L.filter(d=>s(d.change)>0).length,turun:L.filter(d=>s(d.change)<0).length,tetap:L.filter(d=>s(d.change)===0).length,nilai:L.reduce((a,d)=>a+d.close*d.volume,0)};
-    const sec={};for(const d of L)if(d.sector&&d.market_cap_basic)(sec[d.sector]=sec[d.sector]||[]).push(d);
-    o.sectors=Object.entries(sec).map(([k,v])=>({sector:k,chg:v.reduce((a,x)=>a+s(x.change)*x.market_cap_basic,0)/v.reduce((a,x)=>a+x.market_cap_basic,0),n:v.length})).sort((a,b)=>b.chg-a.chg)}
-  o.news=await news('IHSG saham hari ini',8); return o},force)}
-
-function links(t){return{'TradingView':`https://id.tradingview.com/symbols/IDX-${t}/`,'TradingView Berita':`https://id.tradingview.com/symbols/IDX-${t}/news/`,'TradingView Ide':`https://id.tradingview.com/symbols/IDX-${t}/ideas/`,
-  'Yahoo Finance':`https://finance.yahoo.com/quote/${t}.JK/`,'Investing.com':`https://id.investing.com/search/?q=${t}`,'CariSaham':'https://carisaham.com/index.php/','IDX':`https://www.idx.co.id/id/perusahaan-tercatat/profil-perusahaan-tercatat/${t}`}}
-async function stock(t,force){
-  t=t.toUpperCase().replace('.JK','').replace(/[^A-Z]/g,'').slice(0,4); if(t.length!==4)throw new Error('Kode saham harus 4 huruf, contoh: BBCA');
-  const [U]=await getUniverse(force); let tv=(U||{})[t];
-  if(!tv&&U){try{const cols=await tvColumns();tv=tvRows(cols,await tvQuery(cols,[0,1],['IDX:'+t]))[t]}catch(e){}}
-  const tk=(await techFor(t,force,tv,true))||(tv?techFromTV(tv):null); if(!tk)throw new Error(`Data ${t} tidak ditemukan / sumber data tidak dapat diakses`);
-  const f=await yahooFund(t,force).catch(()=>null),med=U?industryMedians(U):{};
-  const fe=fundEval(f,tv,medFor(med,tv,'npm'),medFor(med,tv,'per'),medFor(med,tv,'pbv')),plans={};
-  for(const h of['3h','1m','2m','3b','lt'])plans[h]=plan(tk,h);
-  return{ticker:t,name:(tv||{}).description||t,sector:(tv||{}).sector,industry:(tv||{}).industry,halal:halal(t,tv,fe.metrics.der),tech:tk,fund:fe,scores:scoreH(tk,fe),plans,
-    mcap:(tv||{}).market_cap_basic,updated:nowStr(),news:await news(`saham ${t} ${(tv||{}).description||''}`,8),links:links(t)}}
-
 /* ---------- portofolio (disimpan di browser) ---------- */
 function portLoad(){return LS.get('portfolio',{positions:[],history:[]})}
 function portSave(p){LS.set('portfolio',p)}
@@ -628,14 +418,6 @@ function advice(pos,tk){
   const sp=rp(Math.min(p+a,ma20||p+a));
   return{action:'KURANGI / STOP LOSS',color:'red',sell:sp,stop:rp(cut,'down'),target:be,note:`Rugi ${f(pl)}%, tren lemah. Jual di ${sp} saat pantulan, atau wajib jual bila tembus ${rp(cut,'down')}.`};
 }
-async function portView(force){
-  const pf=portLoad(),tks=[...new Set(pf.positions.map(p=>p.ticker))],[U]=await getUniverse(force),T=await pool(tks,t=>techFor(t,force,(U||{})[t],true),8);
-  let tc=0,tv=0; const out=pf.positions.map(pos=>{const tk=T[pos.ticker]||(U&&U[pos.ticker]?techFromTV(U[pos.ticker]):null),sh=pos.lots*100,cost=sh*pos.price*(1+FEE_BUY),row={...pos,shares:sh,cost};
-    if(tk){const val=sh*tk.price*(1-FEE_SELL);Object.assign(row,{last:tk.price,chg:tk.chg,value:val,pl:val-cost,pl_pct:(val/cost-1)*100,advice:advice(pos,tk),rsi:tk.rsi,trend:tk.trend,cross:tk.cross_50_200,halal:halal(pos.ticker,(U||{})[pos.ticker])});tv+=val}
-    else{row.last=null;row.advice={action:'Data tidak tersedia',color:'amber',note:'Sumber data belum dapat diakses.'};tv+=cost}
-    tc+=cost;return row});
-  return{positions:out,history:(pf.history||[]).slice(-50),total_cost:tc,total_value:tv,total_pl:tv-tc,total_pl_pct:tc?(tv/tc-1)*100:0,realized:(pf.history||[]).reduce((a,h)=>a+(h.pl||0),0),fee:{buy:FEE_BUY,sell:FEE_SELL},updated:nowStr()};
-}
 function portAction(b){
   const pf=portLoad(),t=String(b.ticker||'').toUpperCase().replace(/[^A-Z]/g,'').slice(0,4),find=()=>pf.positions.find(p=>p.id===b.id);
   if(b.action==='add'){const lots=+b.lots,price=+b.price;if(t.length!==4||!(lots>0)||!(price>0))throw new Error('Data tidak valid');
@@ -649,13 +431,73 @@ function portAction(b){
   else if(b.action==='edit'){const ex=find();if(ex){ex.lots=+b.lots;ex.price=+b.price}}
   portSave(pf); return portView(false);
 }
-function clearCache(){for(const k in C)delete C[k];TVCOLS=null;try{Object.keys(localStorage).filter(k=>k.startsWith('fund:')||k.startsWith('bars:')||k==='tvcols'||k==='proxywork').forEach(k=>localStorage.removeItem(k))}catch(e){}for(const k in WORK)delete WORK[k]}
-
+function recItem(r,h){return{...baseItem(r),...plan(r.tk,h),score:Math.round(r.sc[h]*10)/10,reason:reason(r.tk,r.fe,h),perf:r.tk.perf}}
+function scalping(rows){
+  const c=rows.filter(r=>r.tk.value_avg>=2e10&&s(r.tk.avg_range)>=2.5).sort((a,b)=>sc(b)-sc(a)).slice(0,12);
+  function sc(r){return s(r.tk.avg_range)*3+Math.min(s(r.tk.rvol,1),3)*4+(r.tk.trend==='Naik'?5:0)}
+  const w=wib(),hh=w.getUTCHours(),wd=w.getUTCDay(),afterS1=wd>=1&&wd<=5&&hh>=12;
+  return c.map(r=>{const tk=r.tk,pv=tk.pivot,mid=(pv.S1+pv.P)/2;
+    const pagi={buy:`${rp(pv.S1,'down')} - ${rp(mid)}`,tp:`${rp(pv.P>mid*1.008?pv.P:pv.R1,'up')} / ${rp(pv.R1,'up')}`,sl:rp(pv.S1-2*tick(pv.S1),'down'),basis:`Pivot harian (data kemarin): P ${rp(pv.P)}, S1 ${rp(pv.S1)}, R1 ${rp(pv.R1)}`};
+    let siang;const T=tk.today;
+    if(afterS1&&T.h&&T.l&&T.h>T.l){const hi=T.h,lo=T.l,vw=T.vwap||(hi+lo)/2,bz=lo+(hi-lo)*.3;
+      siang={buy:`${rp(lo+(hi-lo)*.15,'down')} - ${rp(Math.min(bz,vw))}`,tp:`${rp(vw+(hi-vw)*.6,'up')} / ${rp(hi,'up')}`,sl:rp(lo-2*tick(lo),'down'),basis:`Range hari ini ${rp(lo)}-${rp(hi)}, VWAP ${rp(vw)}`}}
+    else siang={buy:`${rp(pv.P*.995,'down')} - ${rp(pv.P)}`,tp:`${rp(pv.R1,'up')}`,sl:rp(pv.S1,'down'),basis:'Range sesi 1 belum ada - memakai pivot (refresh setelah 12:00)'};
+    return{...baseItem(r),pagi,siang,avg_range:tk.avg_range,value:tk.value_avg}})}
+function rowFor(t,d,med){const tk=techTV(d);if(!tk)return null;const fe=fundEval(d,medFor(med,d,'npm'),medFor(med,d,'per'),medFor(med,d,'pbv'));
+  return{ticker:t,name:d.description||t,sector:d.sector,industry:d.industry,tk,fe,sc:scoreH(tk,fe),halal:halal(t,d,d.debt_to_equity),has_fund:fe.years.length>=3}}
+async function buildSnapshot(force){
+  const [U,src]=await getUniverse(force),med=industryMedians(U);
+  const port=new Set(portLoad().positions.map(p=>p.ticker)),rows=[];
+  for(const[t,d]of Object.entries(U)){const v=s(d.close)*s(d.average_volume_10d_calc||d.volume);if(v<1e9&&!port.has(t))continue;const r=rowFor(t,d,med);if(r)rows.push(r)}
+  const names={lt:'Jangka Panjang (> 1 tahun)','3b':'3 Bulan','2m':'2 Minggu','1m':'1 Minggu','3h':'3 Hari'},recs={};
+  for(const h in names){let pl=rows;if(h==='lt')pl=rows.filter(r=>r.has_fund&&r.fe.score>=60);if(h==='3b')pl=rows.filter(r=>r.fe.score>=40);
+    recs[h]={title:names[h],items:[...pl].sort((a,b)=>b.sc[h]-a.sc[h]).slice(0,10).map(r=>recItem(r,h))}}
+  const dsc=r=>r.tk.hit3*100+Math.min(s(r.tk.rvol,1),3)*5+r.sc['3h']*.3;
+  const day=rows.filter(r=>s(r.tk.atr_pct)>=3&&r.tk.value_avg>=1e10&&r.tk.hit3>=.25&&(!r.tk.ma20||r.tk.price>r.tk.ma20*.98)&&s(r.tk.rsi,50)<78)
+    .sort((a,b)=>dsc(b)-dsc(a)).slice(0,10).map(r=>{const tk=r.tk,pv=tk.pivot,e=pv.P<tk.price*1.01?Math.min(tk.price,pv.P):tk.price;
+      return{...baseItem(r),entry:`${rp(Math.max(pv.S1,e*.99),'down')} - ${rp(e)}`,target:rp(e*1.03,'up'),target2:rp(Math.max(pv.R1,e*1.045),'up'),stop:rp(e*.985,'down'),hit3:tk.hit3*100,atr_pct:tk.atr_pct}});
+  const quick=rows.map(r=>({...baseItem(r),v:verdict(r.tk,r.sc,planAll(r.tk),r.has_fund)}));
+  return{fresh:{...(FRESH.price||{})},failed:0,partial:false,missing:0,quick,updated:nowStr(),source:src,recs,daytrade:day,scalping:scalping(rows),gorengan:gorengan(U),session:session(),
+    screener:rows.map(screenRow).sort((a,b)=>b.score-a.score),universe_count:Object.keys(U).length}}
+async function snapshot(force){return cached('snap',55,()=>buildSnapshot(force),force)}
+async function overview(force){return cached('ov',55,async()=>{
+  const [U,src]=await getUniverse(force),o={updated:nowStr(),source:src};
+  try{const ix=await tvIndex();o.ihsg=ix.COMPOSITE?{price:ix.COMPOSITE.close,chg:ix.COMPOSITE.change,ma20:ix.COMPOSITE.SMA20,ma50:ix.COMPOSITE.SMA50,ma200:ix.COMPOSITE.SMA200,perf:ix.COMPOSITE}:null;o.lq45=ix.LQ45||null}catch(e){o.ihsg=null}
+  const L=Object.values(U).filter(d=>d.close&&d.volume),liq=L.filter(d=>d.close*d.volume>1e9);
+  const pick=d=>({ticker:d.ticker,name:d.description,price:d.close,chg:d.change,value:d.close*d.volume,rvol:d.relative_volume_10d_calc});
+  o.gainers=[...liq].sort((a,b)=>s(b.change)-s(a.change)).slice(0,10).map(pick);
+  o.losers=[...liq].sort((a,b)=>s(a.change)-s(b.change)).slice(0,10).map(pick);
+  o.active=[...L].sort((a,b)=>b.close*b.volume-a.close*a.volume).slice(0,10).map(pick);
+  o.breadth={naik:L.filter(d=>s(d.change)>0).length,turun:L.filter(d=>s(d.change)<0).length,tetap:L.filter(d=>s(d.change)===0).length,nilai:L.reduce((a,d)=>a+d.close*d.volume,0)};
+  const sec={};for(const d of L)if(d.sector&&d.market_cap_basic)(sec[d.sector]=sec[d.sector]||[]).push(d);
+  o.sectors=Object.entries(sec).map(([k,v])=>({sector:k,chg:v.reduce((a,x)=>a+s(x.change)*x.market_cap_basic,0)/v.reduce((a,x)=>a+x.market_cap_basic,0),n:v.length})).sort((a,b)=>b.chg-a.chg);
+  o.news=await news('IHSG saham hari ini',8);return o},force)}
+function links(t){return{'TradingView':`https://id.tradingview.com/symbols/IDX-${t}/`,'Berita TradingView':`https://id.tradingview.com/symbols/IDX-${t}/news/`,'Ide trading TradingView':`https://id.tradingview.com/symbols/IDX-${t}/ideas/`,
+  'Google News':`https://news.google.com/search?q=saham%20${t}&hl=id&gl=ID&ceid=ID:id`,'CNBC Indonesia':`https://www.cnbcindonesia.com/search?query=${t}`,'Kontan':`https://www.kontan.co.id/search/?search=${t}`,
+  'Yahoo Finance':`https://finance.yahoo.com/quote/${t}.JK/`,'Investing.com':`https://id.investing.com/search/?q=${t}`,'CariSaham':'https://carisaham.com/index.php/','IDX':`https://www.idx.co.id/id/perusahaan-tercatat/profil-perusahaan-tercatat/${t}`}}
+async function stock(t,force){
+  t=String(t).toUpperCase().replace('.JK','').replace(/[^A-Z]/g,'').slice(0,4);if(t.length!==4)throw new Error('Kode saham harus 4 huruf, contoh: BBCA');
+  const [U]=await getUniverse(force),med=industryMedians(U);let d=U[t];
+  if(!d){try{d=await tvOne(t)}catch(e){}}
+  if(!d)throw new Error(`Kode ${t} tidak ditemukan di Bursa Efek Indonesia`);
+  const r=rowFor(t,d,med);if(!r)throw new Error(`Data harga ${t} belum tersedia`);
+  const plans={};for(const h of['3h','1m','2m','3b','lt'])plans[h]=plan(r.tk,h);
+  return{ticker:t,name:r.name,sector:r.sector,industry:r.industry,halal:r.halal,tech:r.tk,fund:r.fe,scores:r.sc,plans,mcap:d.market_cap_basic,updated:nowStr(),
+    news:await news(`saham ${t}`,8),links:links(t)}}
+async function portView(force){
+  const pf=portLoad();let U={};try{[U]=await getUniverse(force)}catch(e){}
+  const miss=[...new Set(pf.positions.map(p=>p.ticker))].filter(t=>!U[t]);for(const t of miss){try{const d=await tvOne(t);if(d)U[t]=d}catch(e){}}
+  let tc=0,tv=0;const out=pf.positions.map(pos=>{const d=U[pos.ticker],tk=d?techTV(d):null,sh=pos.lots*100,cost=sh*pos.price*(1+FEE_BUY),row={...pos,shares:sh,cost};
+    if(tk){const val=sh*tk.price*(1-FEE_SELL);Object.assign(row,{last:tk.price,chg:tk.chg,value:val,pl:val-cost,pl_pct:(val/cost-1)*100,advice:advice(pos,tk),rsi:tk.rsi,trend:tk.trend,cross:tk.cross_50_200,halal:halal(pos.ticker,d,d.debt_to_equity)});tv+=val}
+    else{row.last=null;row.advice={action:'Data tidak tersedia',color:'amber',note:'Belum terhubung ke TradingView.'};tv+=cost}
+    tc+=cost;return row});
+  return{positions:out,history:(pf.history||[]).slice(-50),total_cost:tc,total_value:tv,total_pl:tv-tc,total_pl_pct:tc?(tv/tc-1)*100:0,realized:(pf.history||[]).reduce((a,h)=>a+(h.pl||0),0),fee:{buy:FEE_BUY,sell:FEE_SELL},updated:nowStr()}}
+function clearCache(){for(const k in C)delete C[k];UMEM=null;try{Object.keys(localStorage).filter(k=>/^(fund:|bars:|tvcols|proxywork|tvlast|tvheavy|tvlight)/.test(k)).forEach(k=>localStorage.removeItem(k))}catch(e){}}
 function fresh(){return FRESH.price}
-function resetMem(){for(const k in C)delete C[k];for(const k in HEALTH)delete HEALTH[k]}
+function resetMem(){for(const k in C)delete C[k]}
 async function universe(){const [U]=await getUniverse(false);return U}
-return{resetMem,fresh,health:()=>HEALTH,verdict,speedTest,universe,onUpdate:f=>ONUPD=f,isEnriching:()=>!!ENRICH,overview,snapshot,stock,portView,portAction,portLoad,portSave,news,STATUS,session,nowStr,PROXIES,LS,clearCache,setProg:f=>PROG=f,
-  _t:{technicals,fundEval,plan,rp,tick,advice,halal}};
+return{resetMem,fresh,health:()=>({}),verdict,speedTest,universe,onUpdate:()=>{},isEnriching:()=>false,overview,snapshot,stock,portView,portAction,portLoad,portSave,news,STATUS,session,nowStr,PROXIES:[],LS,clearCache,setProg:f=>PROG=f,
+  _t:{techTV,fundEval,plan,rp,tick,advice,halal,crossEst}};
 })();
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -765,7 +607,7 @@ function autoRetry(sec){ if(RT||RTN>=5)return; RT=setTimeout(()=>{RT=null;RTN++;
 function freshBadge(){
   const f=E.fresh(), el=$('#fresh'); if(!f){el.innerHTML='';return}
   const age=f.t?Math.max(0,Math.round((Date.now()-f.t)/60000)):null, fail=(SNAP&&SNAP.failed)||0;
-  if(f.ok&&f.src==='TradingView'){RTN=0; el.innerHTML=` <span class="b g" title="Harga live TradingView untuk ${f.n} saham">● Harga live</span>`+(fail?` <span class="b y" title="Riwayat harga saham ini belum berhasil diunduh; dicoba lagi di refresh berikutnya">${fail} saham riwayat belum lengkap</span>`:'')}
+  if(f.ok&&f.src==='TradingView'){RTN=0; el.innerHTML=` <span class="b g" title="Harga live TradingView untuk ${f.n} saham">● Live TradingView</span>`+(fail?` <span class="b y" title="Riwayat harga saham ini belum berhasil diunduh; dicoba lagi di refresh berikutnya">${fail} saham riwayat belum lengkap</span>`:'')}
   else if(f.ok){el.innerHTML=` <span class="b y" title="TradingView tidak terjangkau (${esc(f.err||'')}). Harga ${f.n} saham diambil dari Yahoo; data rasio memakai TradingView terakhir.">● Harga via Yahoo (cadangan)</span>`; autoRetry(60)}
   else{$('#dot').style.background='var(--down)'; if(f.t)$('#upd').textContent='Harga terakhir ter-update: '+new Date(f.t).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
     el.innerHTML=` <span class="b r" title="${esc(f.err||'')}">⚠ Harga belum ter-update${age!=null?' · data '+age+' mnt lalu':''}</span> <button class="sm" id="retry">Coba lagi</button>`; autoRetry(30)}
@@ -774,21 +616,35 @@ document.addEventListener('click',e=>{if(e.target.id==='retry'){RTN=0;clearTimeo
 
 /* ---------------- Pasar ---------------- */
 function mini(list,title){return `<div class="card"><h3>${title}</h3><div class="tw"><table><tr><th>Kode</th><th class="n">Harga</th><th class="n">%</th><th class="n">Nilai</th></tr>${(list||[]).map(r=>`<tr><td>${tkL(r.ticker)}</td><td class="n">${f0(r.price)}</td><td class="n">${pct(r.chg)}</td><td class="n">${rpB(r.value)}</td></tr>`).join('')}</table></div></div>`}
+/* Grafik interaktif resmi TradingView (MA20/50/200) */
+let TVJS=null;
+function tvWidget(el,symbol,h=420){
+  if(!el)return; if(el.dataset.sym===symbol&&el.querySelector('iframe'))return; el.dataset.sym=symbol; el.style.height=h+'px';
+  const id='tvw'+Math.random().toString(36).slice(2); el.innerHTML=`<div id="${id}" style="height:100%"></div>`;
+  const dark=matchMedia('(prefers-color-scheme: dark)').matches;
+  const go=()=>new TradingView.widget({container_id:id,symbol,interval:'D',timezone:'Asia/Jakarta',theme:dark?'dark':'light',style:'1',locale:'id',autosize:true,hide_side_toolbar:true,allow_symbol_change:false,save_image:false,
+    studies:[{id:'MASimple@tv-basicstudies',inputs:{length:20}},{id:'MASimple@tv-basicstudies',inputs:{length:50}},{id:'MASimple@tv-basicstudies',inputs:{length:200}}]});
+  if(window.TradingView)return go();
+  TVJS=TVJS||new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://s3.tradingview.com/tv.js';sc.onload=res;sc.onerror=()=>{TVJS=null;rej()};document.head.appendChild(sc)});
+  TVJS.then(go).catch(()=>{el.innerHTML=`<p class="mut" style="padding:20px">Grafik TradingView belum dapat dimuat. <a href="https://id.tradingview.com/symbols/${symbol.replace(':','-')}/" target="_blank" rel="noopener">Buka grafik di TradingView ↗</a></p>`})}
+function keepWidget(id){const el=document.getElementById(id);return el&&el.querySelector('iframe')?el:null}
+function placeWidget(id,kept,symbol,h){const ph=document.getElementById(id);if(!ph)return;if(kept&&kept.dataset.sym===symbol){ph.replaceWith(kept)}else tvWidget(ph,symbol,h)}
 function rPasar(){
-  const o=OV, ih=o.ihsg, b=o.breadth||{};
+  const o=OV, ih=o.ihsg, b=o.breadth||{}, kept=keepWidget('c-ihsg');
   $('#t-pasar').innerHTML=`<div class="grid g4">
-   <div class="card kpi"><div class="l">IHSG</div><div class="v">${ih?f1(ih.price,2):'-'}</div><div>${ih?pct(ih.chg):''}</div></div>
+   <div class="card kpi"><div class="l">IHSG</div><div class="v">${ih?f1(ih.price,2):'-'}</div><div>${ih?pct(ih.chg):''} ${ih&&ih.ma50?`<span class="b ${ih.price>ih.ma50?'g':'r'}">${ih.price>ih.ma50?'di atas':'di bawah'} MA50</span>`:''}</div></div>
    <div class="card kpi"><div class="l">Saham naik / turun / tetap</div><div class="v"><span class="up">${b.naik??'-'}</span> / <span class="down">${b.turun??'-'}</span> / ${b.tetap??'-'}</div></div>
    <div class="card kpi"><div class="l">Nilai transaksi (perkiraan)</div><div class="v">Rp ${rpB(b.nilai)}</div></div>
-   <div class="card kpi"><div class="l">Sumber</div><div class="v" style="font-size:15px">${o.source=='TradingView'?'TradingView + Yahoo':'Yahoo (cadangan)'}</div></div></div>
-  <div class="grid g2" style="margin-top:14px"><div class="card"><h3>IHSG 1 tahun <small>MA20 / MA50</small></h3><div class="chart" id="c-ihsg"></div>${legend([{name:'IHSG'},{name:'MA20',color:COLORS[1]},{name:'MA50',color:COLORS[2]}])}</div>
+   <div class="card kpi"><div class="l">LQ45</div><div class="v">${o.lq45?f1(o.lq45.close,2):'-'}</div><div>${o.lq45?pct(o.lq45.change):''}</div></div></div>
+  <div class="grid g2" style="margin-top:14px"><div class="card"><h3>IHSG <small>grafik TradingView · MA20 / MA50 / MA200</small></h3><div id="c-ihsg"></div></div>
   <div class="card"><h3>Kinerja sektor hari ini <small>rata-rata tertimbang kapitalisasi</small></h3><div class="tw"><table><tr><th>Sektor</th><th class="n">Saham</th><th class="n">%</th><th></th></tr>
    ${(o.sectors||[]).map(s=>`<tr><td>${esc(s.sector)}</td><td class="n">${s.n}</td><td class="n">${pct(s.chg)}</td><td style="width:35%"><div style="height:8px;border-radius:4px;background:${s.chg>=0?'var(--up)':'var(--down)'};width:${Math.min(100,Math.abs(s.chg)*25)}%;${s.chg<0?'margin-left:auto':''}"></div></td></tr>`).join('')}</table></div></div></div>
   <div class="grid g3" style="margin-top:14px">${mini(o.gainers,'Top Gainers <small>nilai > Rp1 M</small>')}${mini(o.losers,'Top Losers')}${mini(o.active,'Teraktif (nilai transaksi)')}</div>
-  <div class="card" style="margin-top:14px"><h3>Berita pasar terkini</h3>${newsList(o.news)}</div>`;
-  if(ih) lineChart($('#c-ihsg'),{t:ih.t,series:[{name:'IHSG',data:ih.c},{name:'MA20',data:ih.ma20,color:COLORS[1],w:1.5},{name:'MA50',data:ih.ma50,color:COLORS[2],w:1.5}],fmt:v=>f1(v,0)});
+  <div class="card" style="margin-top:14px"><h3>Berita pasar</h3>${newsList(o.news,'IHSG')}</div>`;
+  placeWidget('c-ihsg',kept,'IDX:COMPOSITE',380);
 }
-function newsList(n){if(!n||!n.length)return'<p class="mut">Belum ada berita.</p>';return '<ul class="news">'+n.map(x=>`<li><a href="${esc(x.link)}" target="_blank" rel="noopener">${esc(x.title)}</a><br><small>${esc(x.source)} · ${esc((x.date||'').slice(0,22))}</small></li>`).join('')+'</ul>'}
+function newsLinks(t){const q=t&&t!=='IHSG'?'saham '+t:'IHSG saham hari ini';return `<div class="pill">${[['Google News',`https://news.google.com/search?q=${encodeURIComponent(q)}&hl=id&gl=ID&ceid=ID:id`],['TradingView',t&&t!=='IHSG'?`https://id.tradingview.com/symbols/IDX-${t}/news/`:'https://id.tradingview.com/markets/stocks-indonesia/news/'],['CNBC Indonesia',`https://www.cnbcindonesia.com/search?query=${encodeURIComponent(t&&t!=='IHSG'?t:'IHSG')}`],['Kontan',`https://www.kontan.co.id/search/?search=${encodeURIComponent(t&&t!=='IHSG'?t:'IHSG')}`]].map(([n,u])=>`<a class="chip" href="${u}" target="_blank" rel="noopener">${n} ↗</a>`).join('')}</div>`}
+function newsList(n,t){if(!n||!n.length)return newsLinks(t)+'<p class="note">Klik sumber di atas untuk membaca berita terbaru. (Judul berita bisa tampil langsung di sini bila proxy pribadi dipasang — lihat menu Sumber &amp; Berita.)</p>';return '<ul class="news">'+n.map(x=>`<li><a href="${esc(x.link)}" target="_blank" rel="noopener">${esc(x.title)}</a><br><small>${esc(x.source)} · ${esc((x.date||'').slice(0,22))}</small></li>`).join('')+'</ul>'}
 
 /* ---------------- Cek Cepat ---------------- */
 let QC=null, QF='all';
@@ -840,16 +696,16 @@ const HOR=[['3h','3 Hari'],['1m','1 Minggu'],['2m','2 Minggu'],['3b','3 Bulan'],
 function partialNote(){return SNAP&&SNAP.partial?`<div class="card" style="margin-bottom:14px;border-color:var(--amb)">⚡ Tampilan cepat dari harga live TradingView. Riwayat harga & laporan keuangan (${SNAP.missing} data) sedang dilengkapi di latar belakang — halaman ini diperbarui otomatis. <span id="enrich" class="mut"></span></div>`:''}
 function rRek(){
   const R=SNAP.recs;
-  $('#t-rek').innerHTML=partialNote()+`<div class="card" style="margin-bottom:14px"><b>Cara baca:</b> grafik menampilkan pergerakan % 5 saham teratas selama periode sesuai horizon. Entry = area beli, Target = harga jual sasaran, Stop = batas jual rugi. Golden/Death Cross = persilangan MA50 & MA200 (tanda arah tren). <span class="mut">Kandidat: ${SNAP.universe_count} saham IDX, dianalisis ${SNAP.screener.length} saham paling likuid.</span></div>`+
+  $('#t-rek').innerHTML=partialNote()+`<div class="card" style="margin-bottom:14px"><b>Cara baca:</b> grafik menampilkan kinerja harga (%) 5 saham teratas. Entry = area beli, Target = harga jual sasaran, Stop = batas jual rugi. Golden/Death Cross = persilangan MA50 & MA200 (tanda arah tren). <span class="mut">Kandidat: ${SNAP.universe_count} saham IDX, dianalisis ${SNAP.screener.length} saham paling likuid.</span></div>`+
   ['lt','3b','2m','1m','3h'].map(h=>{const r=R[h], top=r.items.slice(0,5);
     return `<div class="card" style="margin-bottom:14px"><h3>${r.title} <small>Top 5 · skor gabungan teknikal${h=='lt'||h=='3b'?' + fundamental':''}</small></h3>
-     <div><div class="chart" id="rc-${h}"></div>${legend(top.map(x=>({name:x.ticker})))}</div>
+     <div><div class="chart" id="rc-${h}"></div>${legend(top.map(x=>({name:x.ticker})))}<p class="note" style="margin-top:2px">Grafik: kinerja harga (%) 5 saham teratas dalam 1 minggu s/d 1 tahun.</p></div>
      <div class="tw" style="margin-top:10px"><table><tr><th>Kode</th><th class="n">Harga</th><th>Entry</th><th class="n">Target</th><th class="n">Stop</th><th class="n">Potensi</th><th>ROE</th><th>PER</th><th>PBV</th><th>Sinyal</th><th>Halal</th></tr>
      ${r.items.map((x,i)=>`<tr${i>=5?' class="more-'+h+' hide"':''}><td>${tkL(x.ticker)}<br><small class="mut">${esc((x.name||'').slice(0,22))}</small></td><td class="n">${f0(x.price)}<br>${pct(x.chg)}</td><td>${x.entry}</td><td class="n up">${f0(x.target)}</td><td class="n down">${f0(x.stop)}</td><td class="n">${pct(x.gain_pct,1)}<br><small class="mut">risk -${f1(x.risk_pct)}%</small></td><td>${roeB(x.roe)}</td><td>${valB(x.per_label)}<br><small class="mut">${x.per?f1(x.per)+'x':''}</small></td><td>${valB(x.pbv_label)}<br><small class="mut">${x.pbv?f1(x.pbv,2)+'x':''}</small></td><td>${crossB(x.cross)} ${crossB(x.cross2,'MA20/50').replace('Golden','GC20/50').replace('Death','DC20/50')}<div class="reason">${esc(x.reason)}</div></td><td>${halalB(x.halal)}</td></tr>`).join('')}</table></div>
      <div class="row" style="margin-top:8px"><button class="ghost sm" onclick="$$('.more-${h}').forEach(e=>e.classList.toggle('hide'))">Tampilkan 10 / 5</button></div>
      <div style="margin-top:10px"><b style="font-size:13px">Berita pendukung</b><div id="rn-${h}" class="mut" style="font-size:12px">memuat…</div></div></div>`}).join('');
-  ['lt','3b','2m','1m','3h'].forEach(h=>{const top=R[h].items.slice(0,5).filter(x=>x.spark); if(!top.length)return;
-    const n=Math.min(...top.map(x=>x.spark.c.length)); lineChart($('#rc-'+h),{t:top[0].spark.t.slice(-n),series:top.map(x=>({name:x.ticker,data:x.spark.c.slice(-n)})),pctMode:true,height:230})});
+  ['lt','3b','2m','1m','3h'].forEach(h=>{const top=R[h].items.slice(0,5).filter(x=>x.perf); if(!top.length)return; const labs=Object.keys(top[0].perf);
+    barChart($('#rc-'+h),{labels:labs,series:top.map((x,i)=>({name:x.ticker,data:labs.map(k=>x.perf[k]),color:COLORS[i]})),height:220,fmt:v=>(v>0?'+':'')+f1(v,0)+'%'})});
   loadRecNews();
 }
 const NEWS={};
@@ -857,7 +713,7 @@ async function loadRecNews(){
   for(const [h] of HOR){const el=$('#rn-'+h); if(!el)continue; const top=SNAP.recs[h].items.slice(0,5); let html='';
     for(const x of top){ if(!NEWS[x.ticker]){try{NEWS[x.ticker]=await api('/api/news?q='+encodeURIComponent('saham '+x.ticker))}catch(e){NEWS[x.ticker]=[]}}
       const n=NEWS[x.ticker].slice(0,2);
-      html+=`<div style="margin:4px 0"><b>${x.ticker}</b>: ${n.length?n.map(a=>`<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a>`).join(' · '):'<span class="mut">belum ada berita</span>'} · <a href="https://id.tradingview.com/symbols/IDX-${x.ticker}/news/" target="_blank">TradingView</a></div>`;
+      html+=`<div style="margin:4px 0"><b>${x.ticker}</b>: ${n.length?n.map(a=>`<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a>`).join(' · ')+' · ':''}<a href="https://id.tradingview.com/symbols/IDX-${x.ticker}/news/" target="_blank" rel="noopener">TradingView ↗</a> · <a href="https://news.google.com/search?q=saham%20${x.ticker}&hl=id&gl=ID&ceid=ID:id" target="_blank" rel="noopener">Google News ↗</a></div>`;
       if(document.body.contains(el)) el.innerHTML=html}}
 }
 
@@ -869,14 +725,14 @@ function rHarian(){
   <div class="card" style="margin-bottom:14px"><h3>Trading harian — target profit minimal 3% <small>dipilih dari volatilitas (ATR), likuiditas & peluang historis</small></h3>
    <div class="tw"><table><tr><th>Kode</th><th class="n">Harga</th><th>Area beli</th><th class="n">TP 1 (+3%)</th><th class="n">TP 2</th><th class="n">Cut loss</th><th class="n">Peluang ≥3%*</th><th class="n">ATR%</th><th>RSI</th><th>Halal</th></tr>
    ${SNAP.daytrade.map(x=>`<tr><td>${tkL(x.ticker)}</td><td class="n">${f0(x.price)}<br>${pct(x.chg)}</td><td>${x.entry}</td><td class="n up">${f0(x.target)}</td><td class="n up">${f0(x.target2)}</td><td class="n down">${f0(x.stop)}</td><td class="n"><span class="b ${x.hit3>=45?'g':'y'}">${f1(x.hit3,0)}%</span></td><td class="n">${f1(x.atr_pct)}%</td><td>${f1(x.rsi,0)}</td><td>${halalB(x.halal)}</td></tr>`).join('')||'<tr><td colspan=10 class="mut">Tidak ada kandidat yang memenuhi syarat saat ini.</td></tr>'}</table></div>
-   <p class="note">*Persentase hari dalam 60 hari terakhir di mana harga tertinggi sempat ≥3% di atas harga pembukaan. Rasio risk/reward 1 : 2 (cut loss −1,5%).</p></div>
+   <p class="note">*Perkiraan peluang harga sempat naik ≥3% dari harga pembukaan, dihitung dari volatilitas harian rata-rata (TradingView). Rasio risk/reward 1 : 2 (cut loss −1,5%).</p></div>
   <div class="card"><h3>Scalping hari ini — sesi pagi & siang <small>range beli / take profit / stop</small></h3><div class="tw"><table>
    <tr><th rowspan=2>Kode</th><th rowspan=2 class="n">Harga</th><th colspan=3 style="text-align:center">Sesi pagi (09:00)</th><th colspan=3 style="text-align:center">Sesi siang (13:30)</th><th rowspan=2>Halal</th></tr>
    <tr><th>Beli</th><th>TP</th><th>SL</th><th>Beli</th><th>TP</th><th>SL</th></tr>
    ${SNAP.scalping.map(x=>`<tr><td>${tkL(x.ticker)}<br><small class="mut">range ${f1(x.avg_range)}%/hari</small></td><td class="n">${f0(x.price)}<br>${pct(x.chg)}</td>
      <td title="${esc(x.pagi.basis)}">${x.pagi.buy}</td><td class="up">${x.pagi.tp}</td><td class="down">${f0(x.pagi.sl)}</td>
      <td title="${esc(x.siang.basis)}">${x.siang.buy}</td><td class="up">${x.siang.tp}</td><td class="down">${f0(x.siang.sl)}</td><td>${halalB(x.halal)}</td></tr>`).join('')||'<tr><td colspan=9 class="mut">Tidak ada kandidat.</td></tr>'}</table></div>
-   <p class="note">Sesi pagi memakai pivot point harian (P, S1, R1) dari data hari sebelumnya. Sesi siang memakai range & VWAP sesi 1 hari ini (tersedia setelah ±12:00 WIB — tekan Refresh). Arahkan kursor ke kolom "Beli" untuk melihat dasar perhitungan.</p></div>`;
+   <p class="note">Sesi pagi memakai pivot point harian (P, S1, R1) dari data hari sebelumnya. Sesi siang memakai range harga & VWAP hari ini (tersedia setelah ±12:00 WIB — tekan Refresh). Arahkan kursor ke kolom "Beli" untuk melihat dasar perhitungan.</p></div>`;
 }
 
 /* ---------------- Gorengan ---------------- */
@@ -894,7 +750,7 @@ function rFund(){
   const k=FSORT.k; rows.sort((a,b)=>((a[k]??-1e18)>(b[k]??-1e18)?1:-1)*FSORT.d);
   const C=[['revenue_growth','Pendapatan tumbuh'],['npm_stable_above_industry','NPM stabil > industri'],['net_income_uptrend','Laba naik (bukan one-off)'],['der_below_1','DER < 1'],['cash_sufficient','Kas cukup'],['retained_positive_growing','Laba ditahan +'],['cfo_positive','CFO +'],['fcf_positive','FCF +']];
   const th=(key,l,n)=>`<th${n?' class="n"':''}>${l}</th>`;
-  $('#t-fund').innerHTML=partialNote()+`<div class="card"><h3>Screener fundamental <small>laporan tahunan 4–5 tahun (Yahoo) + rasio TTM (TradingView)</small></h3>
+  $('#t-fund').innerHTML=partialNote()+`<div class="card"><h3>Screener fundamental <small>laporan tahunan hingga 5 tahun + rasio terkini (TradingView)</small></h3>
    <div class="row" style="margin-bottom:8px"><label><input type="checkbox" id="fa" ${FFIL.all?'checked':''}> Hanya yang lolos semua kriteria</label><label><input type="checkbox" id="fh" ${FFIL.halal?'checked':''}> Hanya indikasi syariah</label><span class="mut">${rows.length} saham</span></div>
    <div class="tw" style="max-height:70vh"><table><tr>${th('ticker','Kode')}${th('score','Skor',1)}${C.map(c=>`<th title="${c[1]}">${c[1]}</th>`).join('')}${th('roe','ROE',1)}${th('der','DER',1)}${th('npm','NPM',1)}<th class="n">NPM ind.</th>${th('cagr','CAGR pend.',1)}${th('cash_months','Kas (bln)',1)}${th('fcf','FCF',1)}${th('per','PER',1)}${th('pbv','PBV',1)}<th>Halal</th></tr>
    ${rows.map(r=>`<tr><td>${tkL(r.ticker)}${r.full?'':' <span class="b y" title="Laporan multi-tahun belum dimuat; memakai data TTM">TTM</span>'}${r.one_off?' <span class="b r" title="Laba tahun terakhir banyak dari pos luar biasa / penjualan aset">one-off</span>':''}</td>
@@ -916,31 +772,29 @@ async function openStock(t,force=false){
 function rDetail(){
   const d=DETAIL, k=d.tech, f=d.fund, m=f.metrics, pv=k.pivot;
   const PL={'3h':'3 Hari','1m':'1 Minggu','2m':'2 Minggu','3b':'3 Bulan','lt':'> 1 Tahun'};
-  const C=[['revenue_growth','Pertumbuhan pendapatan beberapa tahun'],['npm_stable_above_industry','Net Profit Margin konsisten & di atas rata-rata industri'],['net_income_uptrend','Laba bersih tren positif (bukan dari penjualan aset sesaat)'],['der_below_1','DER < 1x'],['cash_sufficient','Kas & setara kas cukup (≥ 3 bulan operasional)'],['retained_positive_growing','Saldo laba positif & terus bertambah'],['cfo_positive','Arus kas operasi positif'],['fcf_positive','Free Cash Flow positif'],['roe_above_15','ROE > 15%']];
-  const S=f.series||{}, ys=f.years||[];
+  const C=[['revenue_growth','Pertumbuhan pendapatan beberapa tahun'],['npm_stable_above_industry','Net Profit Margin konsisten & di atas rata-rata industri'],['net_income_uptrend','Laba bersih tren positif (bukan dari penjualan aset sesaat)'],['der_below_1','DER < 1x'],['cash_sufficient','Kas & setara kas cukup (≥ 3 bulan operasional)'],['retained_positive_growing','Saldo laba positif & bertambah (perkiraan: laba bersih positif tiap tahun)'],['cfo_positive','Arus kas operasi positif'],['fcf_positive','Free Cash Flow positif'],['roe_above_15','ROE > 15%']];
+  const S=f.series||{}, ys=f.years||[], kept=keepWidget('dch');
   $('#t-detail').innerHTML=`<div class="card" style="margin-bottom:14px"><h3><span>${d.ticker} · ${esc(d.name)} <small>${esc(d.sector||'')} ${d.industry?'/ '+esc(d.industry):''}</small></span><span class="row">${halalB(d.halal)}<button class="sm" onclick="addDlg('${d.ticker}',${k.price})">+ Portofolio</button></span></h3>
     <div class="grid g4"><div class="kpi"><div class="l">Harga</div><div class="v">${f0(k.price)}</div>${pct(k.chg)}</div><div class="kpi"><div class="l">Tren</div><div class="v" style="font-size:17px">${k.trend}</div>${crossB(k.cross_50_200)} ${crossB(k.cross_20_50,'MA20/50')}</div>
     <div class="kpi"><div class="l">ROE</div><div class="v">${roeB(m.roe)}</div></div><div class="kpi"><div class="l">PER / PBV</div><div class="v" style="font-size:17px">${m.per?f1(m.per)+'x':'-'} / ${m.pbv?f1(m.pbv,2)+'x':'-'}</div>${valB(m.per_label)} ${valB(m.pbv_label)}</div>
     <div class="kpi"><div class="l">Kap. pasar</div><div class="v" style="font-size:17px">Rp ${rpB(d.mcap)}</div></div><div class="kpi"><div class="l">RSI(14) / ATR</div><div class="v" style="font-size:17px">${f1(k.rsi,0)} / ${f1(k.atr_pct)}%</div></div>
     <div class="kpi"><div class="l">52 minggu</div><div class="v" style="font-size:15px">${f0(k.lo52)} – ${f0(k.hi52)}</div></div><div class="kpi"><div class="l">Skor fundamental</div><div class="v">${f.score}/100</div><small class="mut">${f.passed}/${f.total} kriteria</small></div></div></div>
-   <div class="grid g2"><div class="card"><h3>Grafik harga & Moving Average <small>Golden Cross = MA50 memotong MA200 ke atas</small></h3><div id="dch" class="chart"></div>${legend([{name:'Harga'},{name:'MA20',color:COLORS[1]},{name:'MA50',color:COLORS[2]},{name:'MA200',color:COLORS[3]}])}
-     <div class="row" style="margin-top:6px">${[60,120,250,500].map(n=>`<button class="ghost sm" onclick="drawDetail(${n})">${n==500?'2T':n==250?'1T':n==120?'6B':'3B'}</button>`).join('')}</div>
-     <p class="note">Pivot: S2 ${f0(pv.S2)} · S1 ${f0(pv.S1)} · P ${f0(pv.P)} · R1 ${f0(pv.R1)} · R2 ${f0(pv.R2)} | Support 20h ${f0(k.support20)} · Resistance 60h ${f0(k.resist60)}</p></div>
+   <div class="grid g2"><div class="card"><h3>Grafik harga & Moving Average <small>Golden Cross = MA50 memotong MA200 ke atas</small></h3><div id="dch"></div><p class="note" style="margin-top:4px">Grafik interaktif TradingView dengan garis MA20, MA50 &amp; MA200. ${k.cross_50_200?`MA50/MA200: <b>${k.cross_50_200.type==='golden'?'Golden Cross':'Death Cross'}</b> ${k.cross_50_200.est?'±':''}${k.cross_50_200.days_ago} hari lalu.`:`MA50 ${k.ma50>k.ma200?'di atas':'di bawah'} MA200.`}</p>
+     <p class="note">Pivot: S2 ${f0(pv.S2)} · S1 ${f0(pv.S1)} · P ${f0(pv.P)} · R1 ${f0(pv.R1)} · R2 ${f0(pv.R2)} | Support 1 bln ${f0(k.support20)} · Resistance 3 bln ${f0(k.resist60)}</p></div>
     <div class="card"><h3>Rencana trading per horizon</h3><div class="tw"><table><tr><th>Horizon</th><th>Area beli</th><th class="n">Target</th><th class="n">Stop</th><th class="n">Potensi</th><th class="n">Skor</th></tr>
      ${Object.keys(PL).map(h=>`<tr><td>${PL[h]}</td><td>${d.plans[h].entry}</td><td class="n up">${f0(d.plans[h].target)}</td><td class="n down">${f0(d.plans[h].stop)}</td><td class="n">${pct(d.plans[h].gain_pct,1)}</td><td class="n">${f1(d.scores[h],0)}</td></tr>`).join('')}</table></div>
      <p class="note">Skor &gt; 40 umumnya menarik untuk horizon tersebut; skor negatif = hindari dulu.</p></div></div>
    <div class="grid g2" style="margin-top:14px"><div class="card"><h3>Checklist fundamental</h3><table>${C.map(c=>`<tr><td style="white-space:normal">${c[1]}</td><td>${chk(f.checks[c[0]])}</td></tr>`).join('')}</table>
      <p class="note">NPM rata-rata ${m.npm_avg==null?'-':f1(m.npm_avg)+'%'} vs median industri ${m.industry_npm==null?'-':f1(m.industry_npm)+'%'} · DER ${m.der==null?'-':f1(m.der,2)+'x'} · Kas Rp ${rpB(m.cash)} (${m.cash_months==null?'-':f1(m.cash_months)} bln) · CAGR pendapatan ${m.revenue_cagr==null?'-':f1(m.revenue_cagr)+'%'} ${m.one_off_gain?'· <span class="down">⚠ laba terakhir dipengaruhi pos luar biasa/penjualan aset</span>':''}</p></div>
-    <div class="card"><h3>Tren laporan keuangan tahunan</h3>${ys.length?`<div id="fb1" class="chart"></div>${legend([{name:'Pendapatan'},{name:'Laba bersih',color:COLORS[2]}])}<div id="fb2" class="chart" style="margin-top:10px"></div>${legend([{name:'Arus kas operasi',color:COLORS[5]},{name:'Free cash flow',color:COLORS[1]},{name:'Saldo laba',color:COLORS[3]}])}`:'<p class="mut">Laporan multi-tahun tidak tersedia dari Yahoo untuk saham ini.</p>'}</div></div>
+    <div class="card"><h3>Tren laporan keuangan tahunan</h3>${ys.length?`<div id="fb1" class="chart"></div>${legend([{name:'Pendapatan'},{name:'Laba bersih',color:COLORS[2]}])}<div id="fb2" class="chart" style="margin-top:10px"></div>${legend([{name:'Free cash flow',color:COLORS[1]},{name:'Total utang',color:COLORS[3]}])}`:'<p class="mut">Laporan multi-tahun untuk saham ini belum tersedia di TradingView.</p>'}</div></div>
    ${ys.length?`<div class="card" style="margin-top:14px"><h3>Data tahunan</h3><div class="tw"><table><tr><th>Tahun</th>${ys.map(y=>`<th class="n">${y}</th>`).join('')}</tr>
-    ${[['Pendapatan','revenue'],['Laba bersih','net_income'],['NPM %','npm',1],['ROE %','roe',1],['DER x','der',2],['Kas','cash'],['Total utang','debt'],['Ekuitas','equity'],['Saldo laba','retained'],['Arus kas operasi','cfo'],['Free cash flow','fcf']].map(([l,key,dec])=>`<tr><td>${l}</td>${(S[key]||[]).map(v=>`<td class="n ${v<0?'down':''}">${dec?(v==null?'-':f1(v,dec==2?2:1)):rpB(v)}</td>`).join('')}</tr>`).join('')}</table></div></div>`:''}
-   <div class="grid g2" style="margin-top:14px"><div class="card"><h3>Berita ${d.ticker}</h3>${newsList(d.news)}</div><div class="card"><h3>Tautan riset</h3><ul class="news">${Object.entries(d.links).map(([k2,v])=>`<li><a href="${v}" target="_blank" rel="noopener">${k2}</a></li>`).join('')}</ul></div></div>`;
-  drawDetail(250);
+    ${[['Pendapatan','revenue'],['Laba bersih','net_income'],['NPM %','npm',1],['Free cash flow','fcf'],['Total utang','debt'],['Total aset','assets']].map(([l,key,dec])=>`<tr><td>${l}</td>${(S[key]||[]).map(v=>`<td class="n ${v<0?'down':''}">${dec?(v==null?'-':f1(v,dec==2?2:1)):rpB(v)}</td>`).join('')}</tr>`).join('')}</table></div></div>`:''}
+   <div class="grid g2" style="margin-top:14px"><div class="card"><h3>Berita ${d.ticker}</h3>${newsList(d.news,d.ticker)}</div><div class="card"><h3>Tautan riset</h3><ul class="news">${Object.entries(d.links).map(([k2,v])=>`<li><a href="${v}" target="_blank" rel="noopener">${k2}</a></li>`).join('')}</ul></div></div>`;
+  placeWidget('dch',kept,'IDX:'+d.ticker,420);
   if(ys.length){barChart($('#fb1'),{labels:ys,series:[{name:'Pendapatan',data:S.revenue},{name:'Laba bersih',data:S.net_income,color:COLORS[2]}]});
-    barChart($('#fb2'),{labels:ys,series:[{name:'Arus kas operasi',data:S.cfo,color:COLORS[5]},{name:'Free cash flow',data:S.fcf,color:COLORS[1]},{name:'Saldo laba',data:S.retained,color:COLORS[3]}]})}
+    barChart($('#fb2'),{labels:ys,series:[{name:'Free cash flow',data:S.fcf,color:COLORS[1]},{name:'Total utang',data:S.debt,color:COLORS[3]}]})}
 }
-function drawDetail(n){const s=DETAIL.tech.series; if(!s){$('#dch').innerHTML='<p class="mut">Grafik historis tidak tersedia.</p>';return}
-  const sl=a=>a.slice(-n); lineChart($('#dch'),{t:sl(s.t),series:[{name:'Harga',data:sl(s.c)},{name:'MA20',data:sl(s.ma20),color:COLORS[1],w:1.3},{name:'MA50',data:sl(s.ma50),color:COLORS[2],w:1.3},{name:'MA200',data:sl(s.ma200),color:COLORS[3],w:1.3}],height:280,dateFmt:n>250?'y':'d'})}
+function drawDetail(){}
 
 /* ---------------- Portofolio ---------------- */
 function rPorto(){
@@ -979,48 +833,35 @@ async function rSumber(){
   const L=[['Investing.com - Saham Indonesia','https://id.investing.com/equities/indonesia'],['Yahoo Finance','https://finance.yahoo.com/'],['TradingView - Saham Indonesia','https://id.tradingview.com/markets/stocks-indonesia/'],
    ['TradingView - Ide trading Indonesia','https://id.tradingview.com/markets/stocks-indonesia/ideas/'],['TradingView - Berita saham Indonesia','https://id.tradingview.com/markets/stocks-indonesia/news/'],['CariSaham','https://carisaham.com/index.php/'],
    ['IDX - Pengumuman (UMA/suspensi)','https://www.idx.co.id/id/berita/pengumuman/'],['OJK - Daftar Efek Syariah','https://www.ojk.go.id/id/kanal/syariah/data-dan-statistik/daftar-efek-syariah/default.aspx'],['IDX - Indeks Saham Syariah (ISSI)','https://www.idx.co.id/id/idx-syariah/indeks-saham-syariah/']];
-  $('#t-sumber').innerHTML=`<div class="grid g2"><div class="card"><h3>Sumber data & riset</h3><ul class="news">${L.map(l=>`<li><a href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a></li>`).join('')}</ul></div>
-   <div class="card"><h3>Status koneksi sumber data</h3><div id="st" class="mut">memuat…</div></div></div>
-   <div class="card" style="margin-top:14px;border-color:var(--up)"><h3>🔒 Proxy pribadi — koneksi paling stabil <small>gratis · ±5 menit · sekali saja</small></h3>
-     <p style="margin:0 0 8px">Proxy publik gratis sering kena batas atau mati, sehingga sebagian data gagal ter-update. Proxy pribadi di Cloudflare hanya dipakai oleh dashboard Anda (gratis 100.000 permintaan/hari — dashboard memakai ±5.000/hari).</p>
-     <ol style="margin:0 0 8px 18px;padding:0;line-height:1.7"><li>Buka <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">dash.cloudflare.com</a>, daftar / masuk (gratis).</li>
-     <li>Menu <b>Workers &amp; Pages</b> → <b>Create</b> → <b>Create Worker</b> → beri nama, mis. <code>proxy-saham</code> → <b>Deploy</b>.</li>
-     <li>Klik <b>Edit code</b>, hapus semua isinya, tempel kode di bawah (tombol <b>Salin kode</b>), lalu <b>Deploy</b>.</li>
-     <li>Salin alamat worker Anda (mis. <code>https://proxy-saham.nama-anda.workers.dev</code>), tempel di kolom bawah, klik <b>Simpan &amp; tes</b>.</li></ol>
-     <div class="row"><button class="ghost sm" id="wcp">📋 Salin kode worker</button><input id="wurl" placeholder="https://proxy-saham.nama-anda.workers.dev" style="flex:1;min-width:240px"><button class="sm" id="wsv">Simpan &amp; tes</button><button class="ghost sm" id="wrm">Hapus</button></div>
-     <div id="wres" class="note"></div>
-     <details style="margin-top:6px"><summary class="mut" style="cursor:pointer">Lihat kode worker</summary><pre id="wpre" style="white-space:pre-wrap;font-size:11px;background:var(--bg);padding:8px;border-radius:8px;max-height:260px;overflow:auto"></pre></details></div>
-   <div class="grid g2" style="margin-top:14px"><div class="card"><h3>Pengaturan koneksi <small>proxy CORS</small></h3>
-     <p class="note" style="margin-top:0">Browser memblokir file lokal mengambil data langsung dari situs lain, jadi dashboard memakai proxy publik. Mode <b>Otomatis</b> mencoba semua jalur bersamaan dan memakai yang tercepat. Tekan <b>⚡ Cari koneksi tercepat</b> bila terasa lambat, atau isi proxy sendiri (awalan URL, atau pakai <code>{url}</code>).</p>
-     <div class="row"><select id="pxm"><option value="auto">Otomatis (coba semua)</option>${E.PROXIES.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select>
-     <input id="pxc" placeholder="https://proxy-anda/?url=" style="flex:1;min-width:200px"><button class="sm" id="pxs">Simpan</button><button class="ghost sm" id="pxt">Tes koneksi</button><button class="sm" id="pxf">⚡ Cari koneksi tercepat</button></div><div id="pxr" class="note"></div></div>
-    <div class="card"><h3>Data & cadangan</h3>
+  $('#t-sumber').innerHTML=`<div class="grid g2"><div class="card"><h3>Koneksi data</h3>
+     <p style="margin:0 0 8px">Dashboard mengambil data <b>langsung dari TradingView</b> — tanpa proxy, tanpa pengaturan. Satu permintaan memuat harga, indikator, dan laporan keuangan semua saham IDX.</p>
+     <div class="row"><button class="sm" id="ctest">Tes koneksi</button><span id="cres" class="note" style="margin:0"></span></div>
+     <div id="st" class="mut" style="margin-top:10px">memuat…</div></div>
+    <div class="card"><h3>Sumber data & riset</h3><ul class="news">${L.map(l=>`<li><a href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a></li>`).join('')}</ul></div></div>
+   <div class="grid g2" style="margin-top:14px"><div class="card"><h3>Data & cadangan</h3>
      <div class="row"><button class="ghost sm" id="bex">Ekspor portofolio (.json)</button><label class="b" style="cursor:pointer;padding:6px 10px">Impor portofolio<input type="file" id="bim" accept=".json" hidden></label><button class="ghost sm" id="bcc">Hapus cache data</button></div>
      <p class="note">Daftar resmi saham syariah (ISSI / DES OJK) — tempel kode sahamnya di sini agar status halal memakai daftar resmi:</p>
-     <textarea id="sya" rows="3" style="width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px" placeholder="AALI ACES ADRO ..."></textarea><button class="sm" id="sys" style="margin-top:6px">Simpan daftar syariah</button> <span id="syr" class="note"></span></div></div>
-   <div class="card" style="margin-top:14px"><h3>Cari berita</h3><form id="nf" class="row"><input id="nq" value="IHSG saham" style="flex:1"><button>Cari</button></form><div id="nr" style="margin-top:10px"></div></div>`;
-  $('#nf').onsubmit=async e=>{e.preventDefault(); $('#nr').innerHTML='memuat…'; $('#nr').innerHTML=newsList(await api('/api/news?q='+encodeURIComponent($('#nq').value)))};
-  $('#nf').requestSubmit();
-  const cfg=E.LS.get('proxycfg',{mode:'auto',custom:''}); $('#pxm').value=cfg.mode; $('#pxc').value=cfg.custom||''; $('#sya').value=E.LS.get('syariahlist','');
-  $('#pxs').onclick=()=>{E.LS.set('proxycfg',{mode:$('#pxm').value,custom:$('#pxc').value.trim()}); E.resetMem(); OV=SNAP=null; $('#pxr').textContent='Tersimpan. Tekan Refresh untuk memuat ulang data.'};
-  $('#pxt').onclick=async()=>{$('#pxr').textContent='Menguji…'; E.LS.set('proxycfg',{mode:$('#pxm').value,custom:$('#pxc').value.trim()}); E.resetMem();
-    try{const o=await E.overview(true); $('#pxr').innerHTML=(o.ihsg?'✓ Yahoo Finance OK':'✗ Yahoo gagal')+' · '+(o.source=='TradingView'?'✓ TradingView OK':'✗ TradingView gagal')+' · '+Object.entries(E.STATUS).map(([k,v])=>k+': '+(v.via||v.err||'')).join(' | ')}catch(e){$('#pxr').textContent='Gagal: '+e.message}};
-  $('#pxf').onclick=async()=>{$('#pxr').textContent='Mengukur kecepatan semua jalur…'; const r=await E.speedTest();
-    $('#pxr').innerHTML='<table>'+r.map((x,i)=>`<tr><td>${i==0&&x.ms!=null?'🏆 ':''}${esc(x.name)}</td><td class="n">${x.ms!=null?x.ms+' ms':'<span class="down">gagal</span>'}</td></tr>`).join('')+'</table>'+(r[0]&&r[0].ms!=null?'Jalur tercepat otomatis dipakai.':'Tidak ada jalur yang berhasil — periksa internet atau isi proxy kustom.')};
-  const wsrc=$('#wsrc').value; $('#wpre').textContent=wsrc;
-  const cur=(E.LS.get('proxycfg',{}).custom||''); $('#wurl').value=cur.replace(/\/?\?url=$/,'');
-  $('#wcp').onclick=async()=>{try{await navigator.clipboard.writeText(wsrc);$('#wres').textContent='Kode disalin — tempel di editor Cloudflare.'}catch(e){const t=$('#wpre');getSelection().selectAllChildren(t);$('#wres').textContent='Tekan Ctrl+C untuk menyalin kode yang sudah diblok.'}};
+     <textarea id="sya" rows="3" style="width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px" placeholder="AALI ACES ADRO ..."></textarea><button class="sm" id="sys" style="margin-top:6px">Simpan daftar syariah</button> <span id="syr" class="note"></span></div>
+    <div class="card"><h3>Berita</h3>${newsLinks('IHSG')}<div id="nr" style="margin-top:10px"></div>
+     <details style="margin-top:10px"><summary class="mut" style="cursor:pointer">Opsional: tampilkan judul berita langsung di dashboard</summary>
+     <p class="note">Situs berita tidak mengizinkan dibaca langsung dari browser. Untuk menampilkan judulnya di sini, pasang proxy pribadi gratis di Cloudflare (±5 menit): daftar di <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">dash.cloudflare.com</a> → Workers &amp; Pages → Create Worker → Edit code → tempel kode di bawah → Deploy → tempel alamat worker di kolom ini.</p>
+     <div class="row"><button class="ghost sm" id="wcp">📋 Salin kode worker</button><input id="wurl" placeholder="https://proxy-saham.nama-anda.workers.dev" style="flex:1;min-width:200px"><button class="sm" id="wsv">Simpan &amp; tes</button><button class="ghost sm" id="wrm">Hapus</button></div>
+     <div id="wres" class="note"></div><pre id="wpre" style="white-space:pre-wrap;font-size:11px;background:var(--bg);padding:8px;border-radius:8px;max-height:200px;overflow:auto"></pre></details></div></div>`;
+  $('#sya').value=E.LS.get('syariahlist','');
+  const showSt=()=>api('/api/status').then(s=>{$('#st').innerHTML='<table>'+(Object.entries(s.sources).map(([k,v])=>`<tr><td>${k}</td><td>${v.ok?'<span class="b g">OK</span>':'<span class="b r">Gagal</span>'}</td><td class="mut">${esc(v.time)}${v.via?' · '+esc(v.via):''}${v.ms!=null?' · '+v.ms+' ms':''}${v.err?'<br>'+esc(v.err):''}</td></tr>`).join('')||'<tr><td>Belum ada permintaan.</td></tr>')+'</table>'}).catch(()=>{});
+  showSt();
+  $('#ctest').onclick=async()=>{$('#cres').textContent='Menguji…';const r=await E.speedTest();const x=r[0];$('#cres').innerHTML=x.ms!=null?`✅ TradingView terhubung (${x.ms} ms)`:`❌ ${esc(x.err)} — periksa koneksi internet. Jika memakai jaringan kantor, mungkin TradingView diblokir.`;showSt()};
+  const wsrc=$('#wsrc').value; $('#wpre').textContent=wsrc; $('#wurl').value=(E.LS.get('proxycfg',{}).custom||'').replace(/\/?\?url=$/,'');
+  $('#wcp').onclick=async()=>{try{await navigator.clipboard.writeText(wsrc);$('#wres').textContent='Kode disalin — tempel di editor Cloudflare.'}catch(e){getSelection().selectAllChildren($('#wpre'));$('#wres').textContent='Tekan Ctrl+C untuk menyalin kode yang sudah diblok.'}};
   $('#wsv').onclick=async()=>{let u=$('#wurl').value.trim(); if(!/^https:\/\//.test(u)){$('#wres').textContent='Alamat harus diawali https://';return}
-    u=u.replace(/\/?(\?url=)?$/,'')+'/?url='; const cfg=E.LS.get('proxycfg',{mode:'auto',custom:''}); cfg.custom=u; E.LS.set('proxycfg',cfg); $('#pxc').value=u; E.resetMem();
-    $('#wres').textContent='Menguji proxy pribadi…'; try{const o=await E.overview(true); const st=E.STATUS;
-      $('#wres').innerHTML=(o.source==='TradingView'?'✅ TradingView OK':'❌ TradingView gagal')+' · '+(o.ihsg?'✅ Yahoo OK':'❌ Yahoo gagal')+' · '+(st['Google News']&&st['Google News'].ok?'✅ Berita OK':'Berita: -')+(o.source==='TradingView'&&o.ihsg?' — proxy pribadi aktif, tekan Refresh.':' — periksa alamat & kode worker.'); OV=SNAP=null}
-    catch(e){$('#wres').textContent='Gagal: '+e.message}};
-  $('#wrm').onclick=()=>{const cfg=E.LS.get('proxycfg',{mode:'auto',custom:''}); cfg.custom=''; E.LS.set('proxycfg',cfg); $('#wurl').value=''; $('#pxc').value=''; $('#wres').textContent='Proxy pribadi dihapus; kembali memakai proxy publik.'};
+    u=u.replace(/\/?(\?url=)?$/,'')+'/?url='; E.LS.set('proxycfg',{custom:u}); E.resetMem(); $('#wres').textContent='Menguji…';
+    const n=await E.news('IHSG saham',5); $('#wres').innerHTML=n.length?'✅ Berita tampil langsung — proxy pribadi aktif.':'❌ Belum berhasil — periksa alamat & kode worker.'; if(n.length)$('#nr').innerHTML=newsList(n)};
+  $('#wrm').onclick=()=>{E.LS.set('proxycfg',{custom:''}); $('#wurl').value=''; $('#wres').textContent='Proxy pribadi dihapus.'};
   $('#bex').onclick=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(E.portLoad(),null,1)],{type:'application/json'})); a.download='portofolio-saham.json'; a.click()};
   $('#bim').onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text()); if(!Array.isArray(j.positions))throw 0; E.portSave(j); PORT=null; $('#syr').textContent='Portofolio diimpor.'}catch(er){$('#syr').textContent='File tidak valid.'}};
   $('#bcc').onclick=()=>{E.clearCache(); OV=SNAP=PORT=null; $('#syr').textContent='Cache dihapus.'};
   $('#sys').onclick=()=>{E.LS.set('syariahlist',$('#sya').value); SNAP=null; $('#syr').textContent='Daftar syariah disimpan ('+(($('#sya').value.toUpperCase().match(/\b[A-Z]{4}\b/g))||[]).length+' kode).'};
-  try{const s=await api('/api/status'); $('#st').innerHTML='<table>'+Object.entries(s.sources).map(([k,v])=>`<tr><td>${k}</td><td>${v.ok?'<span class="b g">OK</span>':'<span class="b r">Gagal</span>'}</td><td class="mut">${esc(v.time)}${v.via?' · via '+esc(v.via):''}${v.ms!=null?' · '+v.ms+' ms':''}${v.err?'<br>'+esc(v.err):''}</td></tr>`).join('')+'</table>'||'Belum ada permintaan.'}catch(e){}
+  if(E.LS.get('proxycfg',{}).custom){const n=await api('/api/news?q='+encodeURIComponent('IHSG saham'));if(n.length)$('#nr').innerHTML=newsList(n)}
 }
 
 /* ---------------- Refresh ---------------- */
